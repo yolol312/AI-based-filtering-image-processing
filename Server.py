@@ -1,4 +1,6 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory, render_template
+from flask_cors import CORS
+from flask_socketio import SocketIO, emit
 import os, base64
 import pymysql
 import subprocess
@@ -6,6 +8,9 @@ import threading
 import re
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'secret!'
+CORS(app)
+socketio = SocketIO(app)
 
 # 데이터베이스 연결 함수
 def get_db_connection():
@@ -231,8 +236,6 @@ def save_to_db(person_info, pro_video_id, user_no):
     finally:
         connection.close()
 
-
-
 # 클립 처리 함수
 def clip_video(video_name, user_id, or_video_id):
     try:
@@ -241,7 +244,7 @@ def clip_video(video_name, user_id, or_video_id):
             pro_video_id = get_pro_video_id(or_video_id)
             if pro_video_id is not None:
                 process = subprocess.Popen(
-                    ["python", "Clip.py", video_name, str(user_id), str(user_no), str(pro_video_id)], 
+                    ["python", "videoclip_rect_flask2.py", video_name, str(user_id), str(user_no), str(pro_video_id)], 
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE
                 )
                 stdout, stderr = process.communicate()
@@ -266,7 +269,7 @@ def clip_video(video_name, user_id, or_video_id):
 def tracking_video(video_name, user_id, or_video_id):
     try:
         process = subprocess.Popen(
-            ["python", "Tracking.py", video_name, str(user_id)], 
+            ["python", "tracking_final6_revise2.py", video_name, str(user_id)], 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = process.communicate()
@@ -342,7 +345,7 @@ def process_save_face_info(video_name, user_id, or_video_id, clip_flag):
     try:
         # save_face_info6.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
-            ["python", "Save_info.py", video_name, str(user_id)], 
+            ["python", "save_face_info6.py", video_name, str(user_id)], 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = process.communicate()
@@ -363,7 +366,7 @@ def process_video(video_name, user_id, clip_flag):
     try:
         # Main_image2.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
-            ["python", "Main.py", video_name, str(user_id)], 
+            ["python", "Main_image2.py", video_name, str(user_id)], 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = process.communicate()
@@ -381,39 +384,64 @@ def process_video(video_name, user_id, clip_flag):
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-# 1. 파일 업로드 엔드포인트(Post)
+# WebRTC 신호 처리
+@socketio.on('offer')
+def handle_offer(data):
+    print('Offer received:', data)
+    emit('offer', data, broadcast=True, include_self=False)
+
+@socketio.on('answer')
+def handle_answer(data):
+    print('Answer received:', data)
+    emit('answer', data, broadcast=True, include_self=False)
+
+@socketio.on('ice-candidate')
+def handle_ice_candidate(data):
+    print('ICE Candidate received:', data)
+    emit('ice-candidate', data, broadcast=True, include_self=False)
+
+# 파일 업로드 엔드포인트(Post)
 @app.route('/upload_file', methods=['POST'])
 def upload_file():
     try:
         data = request.get_json()
 
+        # JSON 데이터가 제대로 수신되지 않았을 경우 확인
         if not data:
             return jsonify({"status": "error", "message": "No JSON data received"}), 400
+        
+        # 수신된 데이터가 문자열이 아닌 JSON 객체인지 확인
+        if isinstance(data, str):
+            return jsonify({"status": "error", "message": "Invalid JSON data format"}), 400
 
+        # 유저 데이터 추출
         user_data = data.get('user_data', {})
         user_id = user_data.get('user_id', '')
 
+        # 필터링 데이터 추출
         filter_data = data.get('filter_data', {})
         age = filter_data.get('age', '')
         gender = filter_data.get('gender', '')
         color = filter_data.get('color', '')
         type = filter_data.get('type', '')
 
-        clip_flag = request.form.get('clip_flag', 'false').lower() == 'true'
-
+        # 필터링 데이터 출력
         print(f"Age: {age}")
         print(f"Gender: {gender}")
         print(f"Color: {color}")
         print(f"Type: {type}")
 
-        user_video_path = os.path.join(VIDEO_SAVE_PATH, str(user_id))
-        user_image_path = os.path.join(IMAGE_SAVE_PATH, str(user_id))
+        # user_id 기반으로 디렉토리 생성
+        # 디렉토리 생성
+        user_video_path = os.path.join('uploaded_videos', str(user_id))
+        user_image_path = os.path.join('uploaded_images', str(user_id))
         os.makedirs(user_video_path, exist_ok=True)
         os.makedirs(user_image_path, exist_ok=True)
 
+        # 데이터베이스 연결
         connection = get_db_connection()
-        video_names = []
         with connection.cursor() as cursor:
+            # 비디오 데이터 처리
             video_data = data.get('video_data', [])
             for video in video_data:
                 video_name = video.get('video_name', '')
@@ -424,53 +452,50 @@ def upload_file():
                 if video_name and video_content_base64:
                     video_content = base64.b64decode(video_content_base64)
                     video_path = os.path.join(user_video_path, video_name)
-                    absolute_video_path = os.path.abspath(video_path)
+                    absolute_video_path = os.path.abspath(video_path)  # 절대 경로로 변환
 
                     with open(absolute_video_path, 'wb') as video_file:
                         video_file.write(video_content)
 
-                    # cam_name과 다른 필요한 정보를 이용해 cam_num 조회
-                    sql = "SELECT cam_num FROM camera WHERE cam_name = %s AND map_num = (SELECT map_num FROM map WHERE user_no = (SELECT user_no FROM user WHERE user_id = %s))"
-                    cursor.execute(sql, (cam_name, user_id))
-                    cam_result = cursor.fetchone()
-                    if not cam_result:
-                        print(f"No cam_num found for cam_name: {cam_name} and user_id: {user_id}")
-                        continue
-                    
-                    cam_num = cam_result['cam_num']
-
+                    # 비디오 파일 이름과 절대 경로를 데이터베이스에 삽입
                     sql = """
-                        INSERT INTO origin_video (or_video_name, or_video_content, start_time, cam_num)
+                        INSERT INTO origin_video (or_video_name, or_video_content, start_time, cam_name)
                         VALUES (%s, %s, %s, %s)
                     """
-                    cursor.execute(sql, (video_name, absolute_video_path, start_time, cam_num))
-                    video_names.append(video_name)
+                    cursor.execute(sql, (video_name, absolute_video_path, start_time, cam_name))
 
+            # 이미지 데이터 처리
             image_data = data.get('image_data', {})
             image_name = image_data.get('image_name', '')
             image_content_base64 = image_data.get('image_content', '')
 
             if image_name and image_content_base64:
                 image_content = base64.b64decode(image_content_base64)
-                image_path = os.path.join(user_image_path, image_name)
-                absolute_image_path = os.path.abspath(image_path)
+                image_path = os.path.join('uploaded_images', image_name)
+                absolute_image_path = os.path.abspath(image_path)  # 절대 경로로 변환
 
                 with open(absolute_image_path, 'wb') as image_file:
                     image_file.write(image_content)
 
+                # 이미지 파일 경로를 출력
                 print(f"Image: {image_name}")
                 print(f"Image: {absolute_image_path}")
 
+            # 변경사항 커밋
             connection.commit()
 
+        # 연결 종료
         connection.close()
 
+        # 성공적으로 처리되었다는 응답 반환
         response = jsonify({"status": "success", "message": "Data received and processed successfully"})
         response.status_code = 200
 
-        for video_name in video_names:
-            video_base_name = os.path.splitext(video_name)[0]
-            threading.Thread(target=process_video, args=(video_base_name, user_id, clip_flag)).start()
+        # 각 비디오 파일에 대해 비동기 처리 호출
+        for video in video_data:
+            video_name = video.get('video_name', '')
+            video_base_name = os.path.splitext(video_name)[0]  # 확장자를 제거한 이름
+            threading.Thread(target=process_video, args=(video_base_name,)).start()
 
         return response
 
@@ -484,8 +509,7 @@ def upload_file():
         print(f"An unexpected error occurred: {str(e)}")
         return jsonify({"status": "error", "message": f"An unexpected error occurred: {str(e)}"}), 500
 
-
-# 2.회원가입 엔드포인트(Post)
+# 회원가입 엔드포인트(Post)
 @app.route('/receive_data', methods=['POST'])
 def receive_data():
     data = request.get_json()
@@ -546,7 +570,7 @@ def receive_data():
         print("No data received or invalid format")  # 디버깅 메시지 추가
         return jsonify({"error": "No data received or invalid format"}), 400
     
-# 3. 로그인 엔드포인트(Post)
+# 로그인 엔드포인트(Post)
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -649,7 +673,7 @@ def login():
     else:
         return jsonify({"error": "No data received or invalid format"}), 400
     
-# 4.지도 주소 엔드포인트(Post)
+# 지도 주소 엔드포인트(Post)
 @app.route('/upload_maps', methods=['POST'])
 def upload_map():
     try:
@@ -711,7 +735,7 @@ def upload_map():
         print(f"An error occurred: {str(e)}")
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-# 5.지도 마커 위치 엔드포인트(Post)
+# 지도 마커 위치 엔드포인트(Post)
 @app.route('/upload_markers', methods=['POST'])
 def upload_cameras():
     try:
@@ -778,4 +802,4 @@ def upload_cameras():
 
 if __name__ == '__main__':
     print("Starting server")  # 서버 시작 디버깅 메시지
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
