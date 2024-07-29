@@ -399,7 +399,7 @@ def upload_file():
         color = filter_data.get('color', '')
         type = filter_data.get('type', '')
 
-        clip_flag = request.form.get('clip_flag', 'false').lower() == 'true'
+        clip_flag = request.form.get('clip_flag', 'true').lower() == 'false'
 
         print(f"Age: {age}")
         print(f"Gender: {gender}")
