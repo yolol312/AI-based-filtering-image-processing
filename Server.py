@@ -1,4 +1,6 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory, render_template
+from flask_cors import CORS
+from flask_socketio import SocketIO, emit
 import os, base64
 import pymysql
 import subprocess
@@ -6,6 +8,9 @@ import threading
 import re
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'secret!'
+CORS(app)
+socketio = SocketIO(app)
 
 # 데이터베이스 연결 함수
 def get_db_connection():
@@ -241,7 +246,7 @@ def clip_video(video_name, user_id, or_video_id):
             pro_video_id = get_pro_video_id(or_video_id)
             if pro_video_id is not None:
                 process = subprocess.Popen(
-                    ["python", "videoclip_rect_flask2.py", video_name, str(user_id), str(user_no), str(pro_video_id)], 
+                    ["python", "Clip.py", video_name, str(user_id), str(user_no), str(pro_video_id)], 
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE
                 )
                 stdout, stderr = process.communicate()
@@ -266,7 +271,7 @@ def clip_video(video_name, user_id, or_video_id):
 def tracking_video(video_name, user_id, or_video_id):
     try:
         process = subprocess.Popen(
-            ["python", "tracking_final6_revise2.py", video_name, str(user_id)], 
+            ["python", "Tracking.py", video_name, str(user_id)], 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = process.communicate()
@@ -342,7 +347,7 @@ def process_save_face_info(video_name, user_id, or_video_id, clip_flag=True):
     try:
         # save_face_info6.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
-            ["python", "save_face_info6.py", video_name, str(user_id)], 
+            ["python", "Save_info.py", video_name, str(user_id)], 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = process.communicate()
@@ -363,7 +368,7 @@ def process_video(video_name, user_id, clip_flag=True):
     try:
         # Main_image2.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
-            ["python", "Main_image.py", video_name, str(user_id)], 
+            ["python", "Main.py", video_name, str(user_id)], 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = process.communicate()
@@ -381,18 +386,41 @@ def process_video(video_name, user_id, clip_flag=True):
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
+# WebRTC 신호 처리
+@socketio.on('offer')
+def handle_offer(data):
+    print('Offer received:', data)
+    emit('offer', data, broadcast=True, include_self=False)
+
+@socketio.on('answer')
+def handle_answer(data):
+    print('Answer received:', data)
+    emit('answer', data, broadcast=True, include_self=False)
+
+@socketio.on('ice-candidate')
+def handle_ice_candidate(data):
+    print('ICE Candidate received:', data)
+    emit('ice-candidate', data, broadcast=True, include_self=False)
+
+
 # 1. 파일 업로드 엔드포인트(Post)
 @app.route('/upload_file', methods=['POST'])
 def upload_file():
     try:
         data = request.get_json()
-
+        # JSON 데이터가 제대로 수신되지 않았을 경우 확인
         if not data:
             return jsonify({"status": "error", "message": "No JSON data received"}), 400
+        
+        # 수신된 데이터가 문자열이 아닌 JSON 객체인지 확인
+        if isinstance(data, str):
+            return jsonify({"status": "error", "message": "Invalid JSON data format"}), 400
 
+        # 유저 데이터 추출
         user_data = data.get('user_data', {})
         user_id = user_data.get('user_id', '')
 
+        # 필터링 데이터 추출
         filter_data = data.get('filter_data', {})
         age = filter_data.get('age', '')
         gender = filter_data.get('gender', '')
@@ -406,14 +434,18 @@ def upload_file():
         print(f"Color: {color}")
         print(f"Type: {type}")
 
+        # user_id 기반으로 디렉토리 생성
+        # 디렉토리 생성
         user_video_path = os.path.join(VIDEO_SAVE_PATH, str(user_id))
         user_image_path = os.path.join(IMAGE_SAVE_PATH, str(user_id))
         os.makedirs(user_video_path, exist_ok=True)
         os.makedirs(user_image_path, exist_ok=True)
 
+        # 데이터베이스 연결
         connection = get_db_connection()
         video_names = []
         with connection.cursor() as cursor:
+            # 비디오 데이터 처리
             video_data = data.get('video_data', [])
             for video in video_data:
                 video_name = video.get('video_name', '')
@@ -445,7 +477,7 @@ def upload_file():
                     """
                     cursor.execute(sql, (video_name, absolute_video_path, start_time, cam_num))
                     video_names.append(video_name)
-
+            # 이미지 데이터 처리
             image_data = data.get('image_data', {})
             image_name = image_data.get('image_name', '')
             image_content_base64 = image_data.get('image_content', '')
@@ -457,7 +489,7 @@ def upload_file():
 
                 with open(absolute_image_path, 'wb') as image_file:
                     image_file.write(image_content)
-
+                # 이미지 파일 경로를 출력
                 print(f"Image: {image_name}")
                 print(f"Image: {absolute_image_path}")
 
