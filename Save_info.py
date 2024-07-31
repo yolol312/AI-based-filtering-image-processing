@@ -10,12 +10,12 @@ def parse_filename(filename):
     if match:
         person_id = int(match.group(1))
         frame = int(match.group(2))
-        gender = match.group(3)
-        age = match.group(4)
+        gender = match.group(3).lower()  # 소문자로 변환하여 비교를 쉽게 만듭니다
+        age = match.group(4).lower()  # 소문자로 변환하여 비교를 쉽게 만듭니다
         return person_id, frame, gender, age
     return None
 
-def gather_info_from_files(directory):
+def gather_info_from_files(directory, filter_gender, filter_age):
     info_dict = {}
     image_files = []
 
@@ -24,10 +24,13 @@ def gather_info_from_files(directory):
             parsed_info = parse_filename(file)
             if parsed_info:
                 person_id, frame, gender, age = parsed_info
-                if person_id not in info_dict:
-                    info_dict[person_id] = []
-                info_dict[person_id].append((frame, gender, age))
-                image_files.append((person_id, os.path.join(directory, file)))
+                
+                # 필터 조건을 만족하는 경우에만 처리
+                if (filter_gender == 'any' or filter_gender == gender) and (filter_age == 'any' or filter_age == age):
+                    if person_id not in info_dict:
+                        info_dict[person_id] = []
+                    info_dict[person_id].append((frame, gender, age))
+                    image_files.append((person_id, os.path.join(directory, file)))
 
     for person_id in info_dict:
         info_dict[person_id].sort()  # 프레임을 낮은 순으로 정렬
@@ -83,7 +86,17 @@ def save_best_faces(image_files, output_folder):
 
 if __name__ == "__main__":
     try:
+        video_name = sys.argv[1]  # video_name 인수를 추가로 받음
         user_id = sys.argv[2]
+        filter_gender = sys.argv[3].lower()
+        filter_age = sys.argv[4].lower()
+
+        # "여성" 또는 "남성"을 "female" 또는 "male"로 변환
+        if filter_gender == '여성':
+            filter_gender = 'female'
+        elif filter_gender == '남성':
+            filter_gender = 'male'
+
         output_directory = f"./extracted_images/{user_id}/"
         os.makedirs(output_directory, exist_ok=True)  # 디렉토리를 미리 생성합니다.
 
@@ -92,7 +105,8 @@ if __name__ == "__main__":
                 folder_path = os.path.join(output_directory, video_folder)
                 if os.path.isdir(folder_path):
                     try:
-                        info_dict, image_files = gather_info_from_files(folder_path)
+                        info_dict, image_files = gather_info_from_files(folder_path, filter_gender, filter_age)
+
                         output_file = os.path.join(output_directory, f"{video_folder}_info.txt")
                         save_info_to_txt(info_dict, output_file)
                         print(f"Information saved to {output_file}")
