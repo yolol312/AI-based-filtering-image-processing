@@ -493,7 +493,7 @@ def save_processed_video_info_with_image(video_name, user_id, user_no, or_video_
                         video_files = [vf for vf in os.listdir(person_folder_path) if vf.endswith('.mp4')]
                         
                         for video_file in video_files:
-                            pro_video_name = f"{video_file}"
+                            pro_video_name = f"{video_name}_{video_file}"
                             pro_video_path = os.path.abspath(os.path.join(person_folder_path, video_file))
                             
                             # 중복 체크 로직 추가
