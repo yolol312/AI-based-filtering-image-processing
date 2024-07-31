@@ -50,7 +50,6 @@ def get_image_paths_for_person_nos(person_nos):
         connection.close()
     return image_paths
 
-
 # 트리거처럼 동작하도록 처리 (새로운 클립 추가 시 호출)
 def update_person_face_from_clip(person_no):
     connection = get_db_connection()
@@ -300,8 +299,6 @@ def save_to_db(person_info, or_video_id, user_id, user_no, filter_id):
         connection.close()
     return saved_paths
 
-
-
 # 클립 처리 함수
 def clip_video(video_name, user_id, or_video_id):
     try:
@@ -329,8 +326,8 @@ def clip_video(video_name, user_id, or_video_id):
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-# 트래킹 처리 함수
-def tracking_video(video_name, user_id, or_video_id, filter_id, saved_paths):
+# 트래킹 처리 함수 (이미지 없을 때)
+def tracking_video_without_image(video_name, user_id, or_video_id, filter_id, saved_paths):
     try:
         # Join the paths into a single string, separating each path with a comma or another delimitery
         paths_str = ','.join(saved_paths)
@@ -346,13 +343,35 @@ def tracking_video(video_name, user_id, or_video_id, filter_id, saved_paths):
             print(f"{video_name} 트래킹 영상 추출 성공")
             user_no = get_user_no(user_id)
             if user_no is not None:
-                save_processed_video_info2(video_name, user_id, user_no, or_video_id, filter_id)     
+                save_processed_video_info_without_image(video_name, user_id, user_no, or_video_id, filter_id)     
 
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-# 얼굴 이미지가 주어지지 않았을 때 트래킹 영상 정보 저장
-def save_processed_video_info2(video_name, user_id, user_no, or_video_id, filter_id):
+# 트래킹 처리 함수 (이미지 있을 때)
+def tracking_video_with_image(video_name, user_id, or_video_id, filter_id, saved_paths):
+    try:
+        # Join the paths into a single string, separating each path with a comma or another delimitery
+        paths_str = ','.join(saved_paths)
+        print(f"{video_name} => Tracking  - - - paths : {paths_str}")
+        process = subprocess.Popen(
+            ["python", "Tracking2.py", video_name, str(user_id), paths_str], 
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        stdout, stderr = process.communicate()
+        if process.returncode != 0:
+            print(f"Error occurred: {stderr.decode('utf-8')}")
+        else:
+            print(f"{video_name} 트래킹 영상 추출 성공")
+            user_no = get_user_no(user_id)
+            if user_no is not None:
+                save_processed_video_info_with_image(video_name, user_id, user_no, or_video_id, filter_id)     
+
+    except Exception as e:
+        print(f"An unexpected error occurred: {str(e)}")
+
+# 트래킹 영상 정보 저장 (이미지 없을 때)
+def save_processed_video_info_without_image(video_name, user_id, user_no, or_video_id, filter_id):
     try:
         extracted_dir = f'./extracted_images/{user_id}/{video_name}_clip'
         if not os.path.exists(extracted_dir):
@@ -395,8 +414,8 @@ def save_processed_video_info2(video_name, user_id, user_no, or_video_id, filter
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
     
-# 트래킹 영상 DB에 저장 함수 (특정 인물로 판별했을 때 )
-def save_processed_video_info(video_name, user_id, user_no, or_video_id, filter_id):
+# 트래킹 영상 정보 저장 (이미지 있을 때)
+def save_processed_video_info_with_image(video_name, user_id, user_no, or_video_id, filter_id):
     try:
         extracted_dir = f'./extracted_images/{user_id}/{video_name}_clip'
         if not os.path.exists(extracted_dir):
@@ -439,8 +458,8 @@ def save_processed_video_info(video_name, user_id, user_no, or_video_id, filter_
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-# 얼굴 처리 함수
-def process_save_face_info(video_name, user_id, or_video_id, filter_id, clip_flag=True):
+# 얼굴 처리 함수 (이미지 없을 때)
+def process_save_face_info_without_image(video_name, user_id, or_video_id, filter_id, clip_flag=True):
     try:
         # filter 정보 가져오기
         filter_info = get_filter_info(filter_id)
@@ -477,7 +496,7 @@ def process_save_face_info(video_name, user_id, or_video_id, filter_id, clip_fla
                 print("person DB 저장")
                 print("Saved image paths:", saved_paths)
             
-            tracking_video(video_name, user_id, or_video_id, filter_id, saved_paths)
+            tracking_video_without_image(video_name, user_id, or_video_id, filter_id, saved_paths)
             print("pro_video db 저장")
             #if clip_flag:
                 #clip_video(video_name, user_id, or_video_id)
@@ -485,8 +504,54 @@ def process_save_face_info(video_name, user_id, or_video_id, filter_id, clip_fla
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-# 비디오 처리 함수
-def process_video(video_name, user_id, filter_id, clip_flag=True):
+# 얼굴 처리 함수 (이미지 있을 때)
+def process_save_face_info_with_image(video_name, user_id, or_video_id, filter_id, clip_flag=True):
+    try:
+        # filter 정보 가져오기
+        filter_info = get_filter_info(filter_id)
+        if filter_info:
+            filter_gender = filter_info['filter_gender']
+            filter_age = filter_info['filter_age']
+            filter_color = filter_info['filter_color']
+            filter_clothes = filter_info['filter_clothes']
+        else:
+            print(f"No filter found for filter_id: {filter_id}")
+            return
+        # save_face_info6.py 스크립트 호출 (백그라운드 실행)
+        process = subprocess.Popen(
+            ["python", "Save_info.py", video_name, str(user_id), filter_gender, filter_age, filter_color, filter_clothes], 
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        stdout, stderr = process.communicate()
+        
+        if process.returncode != 0:
+            print(f"Error occurred: {stderr.decode('utf-8')}")
+        else:
+            print(f"{video_name} Save_info.py 정보 추출 성공")
+            # 예시 메모장 파일 경로
+            info_file_path = f'./extracted_images/{user_id}/{video_name}_face_info.txt'
+
+            # 파싱한 person 정보
+            person_info = parse_info_file(info_file_path)
+
+            # DB에 저장
+            user_no = get_user_no(user_id)
+            if user_no is not None:
+                # 이미지 파일 경로 설정
+                saved_paths = save_to_db(person_info, or_video_id, user_id, user_no, filter_id)
+                print("person DB 저장")
+                print("Saved image paths:", saved_paths)
+            
+            tracking_video_with_image(video_name, user_id, or_video_id, filter_id, saved_paths)
+            print("pro_video db 저장")
+            #if clip_flag:
+                #clip_video(video_name, user_id, or_video_id)
+
+    except Exception as e:
+        print(f"An unexpected error occurred: {str(e)}")
+
+# 비디오 처리 함수 (이미지 없을 때)
+def process_video_without_images(video_name, user_id, filter_id, clip_flag=True):
     try:
         # Main_image2.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
@@ -504,10 +569,35 @@ def process_video(video_name, user_id, filter_id, clip_flag=True):
             or_video_id = get_or_video_id_by_path(video_path)
             if or_video_id is not None:
                 print(f"{video_name} save_face_info")
-                process_save_face_info(video_name, user_id, or_video_id, filter_id, clip_flag)
+                process_save_face_info_without_image(video_name, user_id, or_video_id, filter_id, clip_flag)
 
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
+
+# 비디오 처리 함수 (이미지 있을 때)
+def process_video_with_images(video_name, user_id, filter_id, clip_flag=True):
+    try:
+        # Main_image2.py 스크립트 호출 (백그라운드 실행)
+        process = subprocess.Popen(
+            ["python", "Main.py", video_name, str(user_id)], 
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        stdout, stderr = process.communicate()
+
+        if process.returncode != 0:
+            print(f"Error occurred: {stderr.decode('utf-8')}")
+        else:
+            print("Main.py 얼굴정보추출 성공")
+            # 얼굴정보추출 성공 후 save_face_info6.py 실행
+            video_path = os.path.join('uploaded_videos', user_id, video_name + ".mp4")  # 파일 절대 경로로 변경
+            or_video_id = get_or_video_id_by_path(video_path)
+            if or_video_id is not None:
+                print(f"{video_name} save_face_info")
+                process_save_face_info_with_image(video_name, user_id, or_video_id, filter_id, clip_flag)
+
+    except Exception as e:
+        print(f"An unexpected error occurred: {str(e)}")
+
 
 # WebRTC 신호 처리
 @socketio.on('offer')
@@ -550,6 +640,8 @@ def upload_file():
         color = filter_data.get('color', '')
         type = filter_data.get('type', '')
         
+
+
         clip_flag = request.form.get('clip_flag', 'true').lower() != 'false'
         #clip_flag = flag_data.get('clip_flag', 'false')
         #face_flag = flag_data.get('face_flag', 'false')
@@ -559,6 +651,7 @@ def upload_file():
         print(f"Color: {color}")
         print(f"Type: {type}")
         #print(f"Clip_flag: {clip_flag}")
+
 
         # user_id 기반으로 디렉토리 생성
         # 디렉토리 생성
@@ -621,6 +714,7 @@ def upload_file():
             image_name = image_data.get('image_name', '')
             image_content_base64 = image_data.get('image_content', '')
 
+
             if image_name and image_content_base64:
                 image_content = base64.b64decode(image_content_base64)
                 image_path = os.path.join(user_image_path, image_name)
@@ -638,11 +732,13 @@ def upload_file():
         response = jsonify({"status": "success", "message": "Data received and processed successfully"})
         response.status_code = 200
 
-        # process_video 함수에 filter_id를 전달
+        # 이미지 데이터 유무에 따라 다른 함수 호출
         for video_name in video_names:
             video_base_name = os.path.splitext(video_name)[0]
-            print(f"process_video 실행 : {video_base_name}")
-            threading.Thread(target=process_video, args=(video_base_name, user_id, filter_id, clip_flag)).start()
+            if image_name and image_content_base64:
+                threading.Thread(target=process_video_with_images, args=(video_base_name, user_id, filter_id, clip_flag)).start()
+            else:
+                threading.Thread(target=process_video_without_images, args=(video_base_name, user_id, filter_id, clip_flag)).start()
 
         return response
 
@@ -789,7 +885,6 @@ def login():
                         clip_id,
                         person_no,
                         clip_video,
-                        clip_location,
                         clip_time
                     FROM clip
                     WHERE person_no IN (SELECT person_no FROM person WHERE user_no = %s)
