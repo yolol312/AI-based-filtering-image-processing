@@ -1,4 +1,4 @@
-#multi3 코드는 지금 1명에 대해만 바운딩 박스가 그려짐 -> 여러 명 그려지도록 수정 시도
+#다중 트래킹 처리 (이미지 없을 때)
 import cv2
 import sys
 import os
@@ -287,10 +287,10 @@ def process_video(video_path, output_dir, known_face_paths, yolo_model_path, gen
         if video_writer:
             video_writer.write(frame)
 
-        cv2.imshow('Processed Frame', frame)
+        #cv2.imshow('Processed Frame', frame)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        #if cv2.waitKey(1) & 0xFF == ord('q'):
+            #break
 
     v_cap.release()
     if video_writer:
