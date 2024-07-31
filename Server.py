@@ -756,8 +756,8 @@ def login():
                         m.map_latitude, 
                         m.map_longitude, 
                         c.cam_name, 
-                        c.maker_latitude, 
-                        c.maker_longitude
+                        c.cam_latitude, 
+                        c.cam_longitude
                     FROM map m
                     LEFT JOIN camera c ON m.map_num = c.map_num
                     WHERE m.user_no = %s
@@ -921,16 +921,16 @@ def upload_cameras():
                     count += 1
                 existing_names.add(cam_name)
 
-                maker_latitude = camera.get('latitude')
-                maker_longitude = camera.get('longitude')
+                cam_latitude = camera.get('latitude')
+                cam_longitude = camera.get('longitude')
 
-                if cam_name and maker_latitude and maker_longitude:
+                if cam_name and cam_latitude and cam_longitude:
                     sql = """
-                        INSERT INTO camera (cam_name, map_num, maker_latitude, maker_longitude)
+                        INSERT INTO camera (cam_name, map_num, cam_latitude, cam_longitude)
                         VALUES (%s, %s, %s, %s)
                     """
-                    cursor.execute(sql, (cam_name, map_num, maker_latitude, maker_longitude))
-                    print(f"Inserted: {cam_name}, {map_num}, {maker_latitude}, {maker_longitude}")
+                    cursor.execute(sql, (cam_name, map_num, cam_latitude, cam_longitude))
+                    print(f"Inserted: {cam_name}, {map_num}, {cam_latitude}, {cam_longitude}")
                 else:
                     print("Invalid camera data:", camera)
                     return jsonify({"error": "Invalid camera data format received"}), 400
