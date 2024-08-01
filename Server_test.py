@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, send_from_directory, render_template, Response
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import os, base64
@@ -6,9 +6,6 @@ import pymysql
 import subprocess
 import threading
 import re
-import numpy as np
-import cv2
-from datetime import datetime
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -21,17 +18,9 @@ def get_db_connection():
         host='localhost',
         user='root',
         password='1234',
-        database='wb39_project2',
+        database='wb39_project_2',
         cursorclass=pymysql.cursors.DictCursor
     )
-
-# 각 웹캠의 이미지가 저장될 폴더 경로 설정
-SAVE_FOLDER = 'saved_images'
-WEBCAM_FOLDERS = [f"webcam_{i}" for i in range(4)]
-
-# 폴더가 없으면 생성
-for folder in WEBCAM_FOLDERS:
-    os.makedirs(os.path.join(SAVE_FOLDER, folder), exist_ok=True)
 
 # 파일 저장 경로 설정
 VIDEO_SAVE_PATH = 'uploaded_videos'
@@ -40,47 +29,6 @@ IMAGE_SAVE_PATH = 'uploaded_images'
 # 디렉토리 생성
 os.makedirs(VIDEO_SAVE_PATH, exist_ok=True)
 os.makedirs(IMAGE_SAVE_PATH, exist_ok=True)
-
-# pro_video_content를 DB에서 얻어오는 함수
-def get_video_path(user_id, pro_video_name):
-    connection = get_db_connection()
-    try:
-        with connection.cursor() as cursor:
-            # 사용자 번호 가져오기
-            cursor.execute("SELECT user_no FROM user WHERE user_id = %s", (user_id,))
-            user = cursor.fetchone()
-            if not user:
-                return None
-            user_no = user['user_no']
-            
-            # 동영상 경로 가져오기
-            cursor.execute("SELECT pro_video_content FROM processed_video WHERE user_no = %s AND pro_video_name = %s", (user_no, pro_video_name))
-            video = cursor.fetchone()
-            if not video:
-                return None
-            return video['pro_video_content']
-    finally:
-        connection.close()
-
-#person 정보별 이미지 가져오기
-def get_image_paths_for_person_nos(person_nos):
-    connection = get_db_connection()
-    image_paths = []
-    try:
-        with connection.cursor() as cursor:
-            sql = """
-                SELECT person_no, person_origin_face
-                FROM person
-                WHERE person_no IN (%s)
-            """ % ','.join(['%s'] * len(person_nos))
-            cursor.execute(sql, person_nos)
-            results = cursor.fetchall()
-            image_paths = {row['person_no']: row['person_origin_face'] for row in results}
-    except pymysql.MySQLError as e:
-        print(f"MySQL error occurred: {str(e)}")
-    finally:
-        connection.close()
-    return image_paths
 
 # 트리거처럼 동작하도록 처리 (새로운 클립 추가 시 호출)
 def update_person_face_from_clip(person_no):
@@ -199,13 +147,14 @@ def get_or_video_id_by_path(video_path):
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
+            absolute_video_path = os.path.abspath(video_path)
             sql = "SELECT or_video_id FROM origin_video WHERE or_video_content = %s"
-            cursor.execute(sql, (video_path,))
+            cursor.execute(sql, (absolute_video_path,))
             result = cursor.fetchone()
             if result:
                 return result['or_video_id']
             else:
-                print(f"No record found for video_path: {video_path}")
+                print(f"No record found for video_path: {absolute_video_path}")
                 return None
     except pymysql.MySQLError as e:
         print(f"MySQL error occurred: {str(e)}")
@@ -237,21 +186,6 @@ def get_or_video_name(or_video_id):
     finally:
         connection.close()
 
-# 데이터베이스에서 filter 정보 가져오기
-def get_filter_info(filter_id):
-    connection = get_db_connection()
-    try:
-        with connection.cursor() as cursor:
-            sql = "SELECT * FROM filter WHERE filter_id = %s"
-            cursor.execute(sql, (filter_id,))
-            result = cursor.fetchone()
-            return result if result else None
-    except pymysql.MySQLError as e:
-        print(f"MySQL error occurred: {str(e)}")
-        return None
-    finally:
-        connection.close()
-
 # 메모장에서 데이터 읽기 및 파싱 함수
 def parse_info_file(file_path):
     person_info = []
@@ -262,27 +196,20 @@ def parse_info_file(file_path):
             person_id_match = re.search(r'(\d+):', person)
             gender_match = re.search(r'gender: (\w+)', person)
             age_match = re.search(r'age: (\w+)', person)
-            color_match = re.search(r'color: (\w+)', person)
-            clothes_match = re.search(r'clothes: (\w+)', person)
             if person_id_match and gender_match and age_match:
                 person_id = person_id_match.group(1)
                 gender = gender_match.group(1)
                 age = age_match.group(1)
-                color = color_match.group(1)
-                clothes = clothes_match.group(1)
                 person_info.append({
                     'person_id': person_id,
                     'gender': gender,
-                    'age': age,
-                    'color': color,
-                    'clothes': clothes
+                    'age': age
                 })
     return person_info
 
-# Person List DB 저장 (이미지 없을 때)
+# 데이터베이스에 데이터 저장 함수
 def save_to_db(person_info, or_video_id, user_id, user_no, filter_id):
     connection = get_db_connection()
-    saved_paths = []
     try:
         with connection.cursor() as cursor:
             for person in person_info:
@@ -321,79 +248,18 @@ def save_to_db(person_info, or_video_id, user_id, user_no, filter_id):
                     or_video_id,
                     person['age'],
                     person['gender'],
-                    person['color'],  # person_color
-                    person['clothes'],  # person_clothes
+                    '',  # person_color
+                    '',  # person_clothes
                     '',  # person_face
                     face_image_relative_path,  # person_origin_face
                     user_no,
                     filter_id
                 ))
-                saved_paths.append(face_image_relative_path)
         connection.commit()
     except pymysql.MySQLError as e:
         print(f"MySQL error occurred: {str(e)}")
     finally:
         connection.close()
-    return saved_paths
-
-# Person List DB 저장 (이미지 있을 때)
-def save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id, image_path):
-    connection = get_db_connection()
-    saved_paths = []
-    try:
-        with connection.cursor() as cursor:
-            for person in person_info:
-                or_video_name_result = get_or_video_name(or_video_id)
-                if not or_video_name_result:
-                    print(f"No or_video_name found for or_video_id: {or_video_id}")
-                    continue
-                
-                # .mp4 확장자 제거
-                or_video_name = os.path.splitext(or_video_name_result)[0]  # or_video_name_result이 문자열일 경우
-
-                person_id = person['person_id']
-                # 이미지 파일 경로 설정
-                person_image_dir = f'./extracted_images/{user_id}/{or_video_name}_clip/person_{person_id}/'
-                if not os.path.exists(person_image_dir):
-                    print(f"Directory not found: {person_image_dir}")
-                    continue
-
-                # 디렉토리 내의 이미지 파일 찾기
-                face_files = [f for f in os.listdir(person_image_dir) if f.endswith('.jpg') or f.endswith('.png')]
-                if not face_files:
-                    print(f"No image files found in directory: {person_image_dir}")
-                    continue
-
-                # 첫 번째 이미지를 사용 (필요에 따라 다른 선택 방법 사용 가능)
-                face_name = face_files[0]
-
-                # 상대 경로로 저장
-                face_image_relative_path = os.path.join(person_image_dir, face_name)
-                sql = """
-                    INSERT INTO person (person_id, or_video_id, person_age, person_gender, person_color, person_clothes, person_face, person_origin_face, user_no, filter_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """
-                # image_path 앞에 './'를 추가하고, 역슬래시를 슬래시로 변경
-                image_path = f"./{image_path}".replace("\\", "/")
-                cursor.execute(sql, (
-                    person_id,
-                    or_video_id,
-                    person['age'],
-                    person['gender'],
-                    person['color'],  # person_color
-                    person['clothes'],  # person_clothes
-                    image_path,  # person_face
-                    face_image_relative_path,  # person_origin_face
-                    user_no,
-                    filter_id
-                ))
-                saved_paths.append(face_image_relative_path)
-        connection.commit()
-    except pymysql.MySQLError as e:
-        print(f"MySQL error occurred: {str(e)}")
-    finally:
-        connection.close()
-    return saved_paths
 
 # 클립 처리 함수
 def clip_video(video_name, user_id, or_video_id):
@@ -422,98 +288,27 @@ def clip_video(video_name, user_id, or_video_id):
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-# 트래킹 처리 함수 (이미지 없을 때)
-def tracking_video_without_image(video_name, user_id, or_video_id, filter_id, saved_paths):
+# 트래킹 처리 함수
+def tracking_video(video_name, user_id, or_video_id, filter_id):
     try:
-        # Join the paths into a single string, separating each path with a comma or another delimitery
-        paths_str = ','.join(saved_paths)
-        print(f"{video_name} => Tracking  - - - paths : {paths_str}")
         process = subprocess.Popen(
-            ["python", "Tracking.py", video_name, str(user_id), paths_str], 
+            ["python", "Tracking.py", video_name, str(user_id)], 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = process.communicate()
         if process.returncode != 0:
             print(f"Error occurred: {stderr.decode('utf-8')}")
         else:
-            print(f"{video_name} 트래킹 영상 추출 성공")
+            print("트래킹 영상 추출 성공")
             user_no = get_user_no(user_id)
             if user_no is not None:
-                save_processed_video_info_without_image(video_name, user_id, user_no, or_video_id, filter_id)     
-
-    except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
-
-# 트래킹 처리 함수 (이미지 있을 때)
-def tracking_video_with_image(video_name, user_id, or_video_id, filter_id, saved_paths):
-    try:
-        # Join the paths into a single string, separating each path with a comma or another delimitery
-        paths_str = ','.join(saved_paths)
-        print(f"{video_name} => Tracking  - - - paths : {paths_str}")
-        process = subprocess.Popen(
-            ["python", "Tracking_with_image.py", video_name, str(user_id), paths_str], 
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        stdout, stderr = process.communicate()
-        if process.returncode != 0:
-            print(f"Error occurred: {stderr.decode('utf-8')}")
-        else:
-            print(f"{video_name} 트래킹 영상 추출 성공")
-            user_no = get_user_no(user_id)
-            if user_no is not None:
-                save_processed_video_info_with_image(video_name, user_id, user_no, or_video_id, filter_id)     
-
-    except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
-
-# 트래킹 영상 정보 저장 (이미지 없을 때)
-def save_processed_video_info_without_image(video_name, user_id, user_no, or_video_id, filter_id):
-    try:
-        extracted_dir = f'./extracted_images/{user_id}/{video_name}_clip'
-        if not os.path.exists(extracted_dir):
-            print(f"No clip folder found for video {video_name}")
-            return
-        
-        pro_video_name = f"{video_name}_output.mp4"
-        pro_video_path = os.path.abspath(os.path.join(extracted_dir, pro_video_name))
-        
-        if not os.path.exists(pro_video_path):
-            print(f"No processed video file found: {pro_video_path}")
-            return
-        
-        # Replace backslashes with forward slashes
-        pro_video_path = pro_video_path.replace('\\', '/')
-        connection = get_db_connection()
-        try:
-            with connection.cursor() as cursor:
-                # 중복 체크 로직 추가
-                sql_check = """
-                    SELECT COUNT(*) as count FROM processed_video 
-                    WHERE pro_video_name = %s AND or_video_id = %s
-                """
-                cursor.execute(sql_check, (pro_video_name, or_video_id))
-                count = cursor.fetchone()['count']
-                
-                if count == 0:
-                    sql = """
-                        INSERT INTO processed_video (or_video_id, pro_video_name, pro_video_content, user_no, filter_id)
-                        VALUES (%s, %s, %s, %s, %s)
-                    """
-                    cursor.execute(sql, (or_video_id, pro_video_name, pro_video_path, user_no, filter_id))
-                    connection.commit()
-                    print(f"Processed video info saved: {pro_video_name}")
-                else:
-                    print(f"Processed video already exists: {pro_video_name}")
-
-        except pymysql.MySQLError as e:
-            print(f"MySQL error occurred: {str(e)}")
-        finally:
-            connection.close()
+                save_processed_video_info(video_name, user_id, user_no, or_video_id, filter_id)     
+    
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
     
-# 트래킹 영상 정보 저장 (이미지 있을 때)
-def save_processed_video_info_with_image(video_name, user_id, user_no, or_video_id, filter_id):
+# 트래킹 영상 DB에 저장 함수
+def save_processed_video_info(video_name, user_id, user_no, or_video_id, filter_id):
     try:
         extracted_dir = f'./extracted_images/{user_id}/{video_name}_clip'
         if not os.path.exists(extracted_dir):
@@ -531,9 +326,9 @@ def save_processed_video_info_with_image(video_name, user_id, user_no, or_video_
                         video_files = [vf for vf in os.listdir(person_folder_path) if vf.endswith('.mp4')]
                         
                         for video_file in video_files:
-                            pro_video_name = f"{video_name}_{video_file}"
+                            pro_video_name = f"{video_name}_{person_id}_{video_file}"
                             pro_video_path = os.path.abspath(os.path.join(person_folder_path, video_file))
-                            pro_video_path = pro_video_path.replace('\\', '/')
+                            
                             # 중복 체크 로직 추가
                             sql_check = """
                                 SELECT COUNT(*) as count FROM processed_video 
@@ -556,22 +351,12 @@ def save_processed_video_info_with_image(video_name, user_id, user_no, or_video_
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-# 얼굴 처리 함수 (이미지 없을 때)
-def process_save_face_info_without_image(video_name, user_id, or_video_id, filter_id, clip_flag=True):
+# 얼굴 처리 함수
+def process_save_face_info(video_name, user_id, or_video_id, filter_id, clip_flag=True):
     try:
-        # filter 정보 가져오기
-        filter_info = get_filter_info(filter_id)
-        if filter_info:
-            filter_gender = filter_info['filter_gender']
-            filter_age = filter_info['filter_age']
-            filter_color = filter_info['filter_color']
-            filter_clothes = filter_info['filter_clothes']
-        else:
-            print(f"No filter found for filter_id: {filter_id}")
-            return
         # save_face_info6.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
-            ["python", "Save_info.py", video_name, str(user_id), filter_gender, filter_age, filter_color, filter_clothes], 
+            ["python", "Save_info.py", video_name, str(user_id)], 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = process.communicate()
@@ -579,7 +364,8 @@ def process_save_face_info_without_image(video_name, user_id, or_video_id, filte
         if process.returncode != 0:
             print(f"Error occurred: {stderr.decode('utf-8')}")
         else:
-            print(f"{video_name} Save_info.py 정보 추출 성공")
+            print("Save_info.py 정보 추출 성공")
+
             # 예시 메모장 파일 경로
             info_file_path = f'./extracted_images/{user_id}/{video_name}_face_info.txt'
 
@@ -590,66 +376,18 @@ def process_save_face_info_without_image(video_name, user_id, or_video_id, filte
             user_no = get_user_no(user_id)
             if user_no is not None:
                 # 이미지 파일 경로 설정
-                saved_paths = save_to_db(person_info, or_video_id, user_id, user_no, filter_id)
+                save_to_db(person_info, or_video_id, user_id, user_no, filter_id)
                 print("person DB 저장")
-                print("Saved image paths:", saved_paths)
             
-            tracking_video_without_image(video_name, user_id, or_video_id, filter_id, saved_paths)
+            
+            tracking_video(video_name, user_id, or_video_id, filter_id)
             print("pro_video db 저장")
-            #if clip_flag:
-                #clip_video(video_name, user_id, or_video_id)
 
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-# 얼굴 처리 함수 (이미지 있을 때)
-def process_save_face_info_with_image(video_name, user_id, or_video_id, filter_id, image_path, clip_flag=True):
-    try:
-        # filter 정보 가져오기
-        filter_info = get_filter_info(filter_id)
-        if filter_info:
-            filter_gender = filter_info['filter_gender']
-            filter_age = filter_info['filter_age']
-            filter_color = filter_info['filter_color']
-            filter_clothes = filter_info['filter_clothes']
-        else:
-            print(f"No filter found for filter_id: {filter_id}")
-            return
-        # save_face_info6.py 스크립트 호출 (백그라운드 실행)
-        process = subprocess.Popen(
-            ["python", "Save_info_with_image.py", video_name, str(user_id), filter_gender, filter_age, filter_color, filter_clothes, image_path], 
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        stdout, stderr = process.communicate()
-        
-        if process.returncode != 0:
-            print(f"Error occurred: {stderr.decode('utf-8')}")
-        else:
-            print(f"{video_name} Save_info.py 정보 추출 성공")
-            # 예시 메모장 파일 경로
-            info_file_path = f'./extracted_images/{user_id}/{video_name}_face_info.txt'
-
-            # 파싱한 person 정보
-            person_info = parse_info_file(info_file_path)
-
-            # DB에 저장
-            user_no = get_user_no(user_id)
-            if user_no is not None:
-                # 이미지 파일 경로 설정
-                saved_paths = save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id, image_path)
-                print("person DB 저장")
-                print("Saved image paths:", saved_paths)
-            
-            tracking_video_with_image(video_name, user_id, or_video_id, filter_id, saved_paths)
-            print("pro_video db 저장")
-            #if clip_flag:
-                #clip_video(video_name, user_id, or_video_id)
-
-    except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
-
-# 비디오 처리 함수 (이미지 없을 때)
-def process_video_without_images(video_name, user_id, filter_id, clip_flag=True):
+# 비디오 처리 함수
+def process_video(video_name, user_id, filter_id, clip_flag=True):
     try:
         # Main_image2.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
@@ -664,80 +402,33 @@ def process_video_without_images(video_name, user_id, filter_id, clip_flag=True)
             print("Main.py 얼굴정보추출 성공")
             # 얼굴정보추출 성공 후 save_face_info6.py 실행
             video_path = os.path.join('uploaded_videos', user_id, video_name + ".mp4")  # 파일 절대 경로로 변경
-            video_path = video_path.replace("\\", "/")
             or_video_id = get_or_video_id_by_path(video_path)
             if or_video_id is not None:
-                process_save_face_info_without_image(video_name, user_id, or_video_id, filter_id, clip_flag)
+                process_save_face_info(video_name, user_id, or_video_id, filter_id, clip_flag)
 
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-# 비디오 처리 함수 (이미지 있을 때)
-def process_video_with_images(video_name, user_id, filter_id, image_path, clip_flag=True):
+# pro_video_content를 DB에서 얻어오는 함수
+def get_video_path(user_id, pro_video_name):
+    connection = get_db_connection()
     try:
-        # Main_image2.py 스크립트 호출 (백그라운드 실행)
-        process = subprocess.Popen(
-            ["python", "Main.py", video_name, str(user_id)], 
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        stdout, stderr = process.communicate()
-
-        if process.returncode != 0:
-            print(f"Error occurred: {stderr.decode('utf-8')}")
-        else:
-            print("Main.py 얼굴정보추출 성공")
-            # 얼굴정보추출 성공 후 save_face_info6.py 실행
-            video_path = os.path.join('uploaded_videos', user_id, video_name + ".mp4")  # 파일 절대 경로로 변경
-            video_path = video_path.replace("\\", "/")
-            or_video_id = get_or_video_id_by_path(video_path)
-            if or_video_id is not None:
-                process_save_face_info_with_image(video_name, user_id, or_video_id, filter_id, image_path, clip_flag)
-
-    except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
-
-# 0. 실시간 웹캠 이미지 전송(Post)
-@app.route('/upload_image_<int:webcam_id>', methods=['POST'])
-def upload_image(webcam_id):
-
-    data = request.get_json()
-    # JSON 데이터가 제대로 수신되지 않았을 경우 확인
-    if not data:
-        return jsonify({"status": "error", "message": "No JSON data received"}), 400
-    
-    # 수신된 데이터가 문자열이 아닌 JSON 객체인지 확인
-    if isinstance(data, str):
-        return jsonify({"status": "error", "message": "Invalid JSON data format"}), 400
-    
-    user_data = data.get('user_data', {})
-    user_id = user_data.get('user_id', '')
-    
-    if webcam_id < 0 or webcam_id >= len(WEBCAM_FOLDERS):
-        return jsonify({"error": "Invalid webcam ID"}), 400
-
-    if 'image' not in request.files:
-        return jsonify({"error": "No image provided"}), 400
-    
-    file = request.files['image']
-    img_array = np.frombuffer(file.read(), np.uint8)
-    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-
-    if img is None:
-        return jsonify({"error": "Image decoding failed"}), 500
-    
-
-    # 이미지 파일 저장
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    
-    videoname = f"{user_id}_realtime"
-    filename = f"{timestamp}_{videoname}.jpg"
-    folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id])
-    filepath = os.path.join(folder_path, filename)
-    cv2.imwrite(filepath, img)
-    
-    print(f"Received and saved image from webcam {webcam_id} with shape: {img.shape} as {filename}")
-    
-    return jsonify({"message": "Image received and saved"}), 200
+        with connection.cursor() as cursor:
+            # 사용자 번호 가져오기
+            cursor.execute("SELECT user_no FROM user WHERE user_id = %s", (user_id,))
+            user = cursor.fetchone()
+            if not user:
+                return None
+            user_no = user['user_no']
+            
+            # 동영상 경로 가져오기
+            cursor.execute("SELECT pro_video_content FROM processed_video WHERE user_no = %s AND pro_video_name = %s", (user_no, pro_video_name))
+            video = cursor.fetchone()
+            if not video:
+                return None
+            return video['pro_video_content']
+    finally:
+        connection.close()
 
 # clip_video 출력을 위한 Person정보 입력받기
 @app.route('/get_Person_to_clip', methods=['GET'])
@@ -854,40 +545,58 @@ def stream_video():
 def upload_file():
     try:
         data = request.get_json()
+        # JSON 데이터가 제대로 수신되지 않았을 경우 확인
         if not data:
             return jsonify({"status": "error", "message": "No JSON data received"}), 400
+        
+        # 수신된 데이터가 문자열이 아닌 JSON 객체인지 확인
         if isinstance(data, str):
             return jsonify({"status": "error", "message": "Invalid JSON data format"}), 400
 
+        # 유저 데이터 추출
         user_data = data.get('user_data', {})
         user_id = user_data.get('user_id', '')
 
+        # 필터링 데이터 추출
         filter_data = data.get('filter_data', {})
         age = filter_data.get('age', '')
         gender = filter_data.get('gender', '')
         color = filter_data.get('color', '')
         type = filter_data.get('type', '')
-
+        
         clip_flag = request.form.get('clip_flag', 'true').lower() != 'false'
+        #clip_flag = flag_data.get('clip_flag', 'false')
+        #face_flag = flag_data.get('face_flag', 'false')
 
+        print(f"Age: {age}")
+        print(f"Gender: {gender}")
+        print(f"Color: {color}")
+        print(f"Type: {type}")
+        #print(f"Clip_flag: {clip_flag}")
+
+        # user_id 기반으로 디렉토리 생성
+        # 디렉토리 생성
         user_video_path = os.path.join(VIDEO_SAVE_PATH, str(user_id))
         user_image_path = os.path.join(IMAGE_SAVE_PATH, str(user_id))
         os.makedirs(user_video_path, exist_ok=True)
         os.makedirs(user_image_path, exist_ok=True)
 
+        # 데이터베이스 연결
         connection = get_db_connection()
         video_names = []
         filter_id = None
         with connection.cursor() as cursor:
+            # 필터 데이터를 DB에 삽입
             filter_sql = """
                 INSERT INTO filter (filter_gender, filter_age, filter_color, filter_clothes)
                 VALUES (%s, %s, %s, %s)
             """
             cursor.execute(filter_sql, (gender, age, color, type))
-            filter_id = cursor.lastrowid
+            filter_id = cursor.lastrowid  # 생성된 filter_id 가져오기
             print("filter DB create")
-            print(f"filter ID : {filter_id}")
-
+            print(filter_id)
+            
+            # 비디오 데이터 처리
             video_data = data.get('video_data', [])
             for video in video_data:
                 video_name = video.get('video_name', '')
@@ -898,54 +607,65 @@ def upload_file():
                 if video_name and video_content_base64:
                     video_content = base64.b64decode(video_content_base64)
                     video_path = os.path.join(user_video_path, video_name)
-                    video_path = video_path.replace("\\", "/")
-                    with open(video_path, 'wb') as video_file:
+                    absolute_video_path = os.path.abspath(video_path)
+
+                    with open(absolute_video_path, 'wb') as video_file:
                         video_file.write(video_content)
 
-                    sql = "SELECT cam_num FROM camera WHERE cam_name = %s AND map_num = (SELECT map_num FROM map WHERE user_no = (SELECT user_no FROM user WHERE user_id = %s))"
+                    # cam_name과 다른 필요한 정보를 이용해 cam_num 조회
+                    sql = """
+                        SELECT cam_num 
+                        FROM camera 
+                        WHERE cam_name = %s 
+                        AND map_num IN (SELECT map_num FROM map WHERE user_no = (SELECT user_no FROM user WHERE user_id = %s))
+                    """
                     cursor.execute(sql, (cam_name, user_id))
-                    cam_result = cursor.fetchone()
-                    if not cam_result:
+                    cam_results = cursor.fetchall()
+                    if not cam_results:
                         print(f"No cam_num found for cam_name: {cam_name} and user_id: {user_id}")
                         continue
                     
-                    cam_num = cam_result['cam_num']
+                    for cam_result in cam_results:
+                        cam_num = cam_result['cam_num']
 
-                    sql = """
-                        INSERT INTO origin_video (or_video_name, or_video_content, start_time, cam_num)
-                        VALUES (%s, %s, %s, %s)
-                    """
-                    cursor.execute(sql, (video_name, video_path, start_time, cam_num))
-                    video_names.append(video_name)
-            
+                        # origin_video에 데이터 삽입
+                        sql = """
+                            INSERT INTO origin_video (or_video_name, or_video_content, start_time, cam_num)
+                            VALUES (%s, %s, %s, %s)
+                        """
+                        cursor.execute(sql, (video_name, absolute_video_path, start_time, cam_num))
+                        video_names.append(video_name)
+                
+
+            # 이미지 데이터 처리
             image_data = data.get('image_data', {})
             image_name = image_data.get('image_name', '')
             image_content_base64 = image_data.get('image_content', '')
 
-            image_path = None
             if image_name and image_content_base64:
                 image_content = base64.b64decode(image_content_base64)
                 image_path = os.path.join(user_image_path, image_name)
+                absolute_image_path = os.path.abspath(image_path)
 
-                with open(image_path, 'wb') as image_file:
+                with open(absolute_image_path, 'wb') as image_file:
                     image_file.write(image_content)
                 print(f"Image: {image_name}")
-                print(f"Image: {image_path}")
+                print(f"Image: {absolute_image_path}")
 
             connection.commit()
-            connection.close()
 
-            response = jsonify({"status": "success", "message": "Data received and processed successfully"})
-            response.status_code = 200
+        connection.close()
 
-            for video_name in video_names:
-                video_base_name = os.path.splitext(video_name)[0]
-                if image_path:
-                    threading.Thread(target=process_video_with_images, args=(video_base_name, user_id, filter_id, image_path, clip_flag)).start()
-                else:
-                    threading.Thread(target=process_video_without_images, args=(video_base_name, user_id, filter_id, clip_flag)).start()
+        response = jsonify({"status": "success", "message": "Data received and processed successfully"})
+        response.status_code = 200
 
-            return response
+        # process_video 함수에 filter_id를 전달
+        for video_name in video_names:
+            video_base_name = os.path.splitext(video_name)[0]
+            print(f"process_video 실행 : {video_base_name}")
+            threading.Thread(target=process_video, args=(video_base_name, user_id, filter_id, clip_flag)).start()
+
+        return response
 
     except ValueError as e:
         print(f"A ValueError occurred: {str(e)}")
@@ -956,7 +676,6 @@ def upload_file():
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
         return jsonify({"status": "error", "message": f"An unexpected error occurred: {str(e)}"}), 500
-
 
 # 2.회원가입 엔드포인트(Post)
 @app.route('/receive_data', methods=['POST'])
