@@ -1,4 +1,4 @@
-#다중 트래킹 처리 (이미지 없을 때)
+#다중 트래킹 처리 
 import cv2
 import sys
 import os
