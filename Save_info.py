@@ -6,16 +6,18 @@ import cv2
 from collections import Counter
 
 def parse_filename(filename):
-    match = re.match(r'person_(\d+)_frame_(\d+)_gender_(\w+)_age_(\w+)\.jpg', filename)
+    match = re.match(r'person_(\d+)_frame_(\d+)_gender_(\w+)_age_(\w+)_color_(\w+)_clothes_(\w+)\.jpg', filename)
     if match:
         person_id = int(match.group(1))
         frame = int(match.group(2))
         gender = match.group(3).lower()  # 소문자로 변환하여 비교를 쉽게 만듭니다
         age = match.group(4).lower()  # 소문자로 변환하여 비교를 쉽게 만듭니다
-        return person_id, frame, gender, age
+        color = match.group(5).lower()
+        clothes = match.group(6).lower()
+        return person_id, frame, gender, age, color, clothes
     return None
 
-def gather_info_from_files(directory, filter_gender, filter_age):
+def gather_info_from_files(directory, filter_gender, filter_age, filter_color, filter_clothes):
     info_dict = {}
     image_files = []
 
@@ -23,13 +25,16 @@ def gather_info_from_files(directory, filter_gender, filter_age):
         if file.endswith('.jpg'):
             parsed_info = parse_filename(file)
             if parsed_info:
-                person_id, frame, gender, age = parsed_info
-                
+                person_id, frame, gender, age, color, clothes = parsed_info
+
                 # 필터 조건을 만족하는 경우에만 처리
-                if (filter_gender == 'any' or filter_gender == gender) and (filter_age == 'any' or filter_age == age):
+                if (filter_gender == 'any' or filter_gender == gender) and \
+                   (filter_age == 'any' or filter_age == age) and \
+                   (filter_color == 'any' or filter_color == color) and \
+                   (filter_clothes == 'any' or filter_clothes == clothes):
                     if person_id not in info_dict:
                         info_dict[person_id] = []
-                    info_dict[person_id].append((frame, gender, age))
+                    info_dict[person_id].append((frame, gender, age, color, clothes))
                     image_files.append((person_id, os.path.join(directory, file)))
 
     for person_id in info_dict:
@@ -45,15 +50,21 @@ def get_most_common(values):
 def save_info_to_txt(info_dict, output_file):
     with open(output_file, 'w') as f:
         for person_id in sorted(info_dict.keys()):
-            frames = [frame for frame, gender, age in info_dict[person_id]]
-            genders = [gender for frame, gender, age in info_dict[person_id]]
-            ages = [age for frame, gender, age in info_dict[person_id]]
+            frames = [frame for frame, gender, age, color, clothes in info_dict[person_id]]
+            genders = [gender for frame, gender, age, color, clothes in info_dict[person_id]]
+            ages = [age for frame, gender, age, color, clothes in info_dict[person_id]]
+            colors = [color for frame, gender, age, color, clothes in info_dict[person_id]]
+            clothes_types = [clothes for frame, gender, age, color, clothes in info_dict[person_id]]
             most_common_gender = get_most_common(genders)
             most_common_age = get_most_common(ages)
-            
+            most_common_color = get_most_common(colors)
+            most_common_clothes = get_most_common(clothes_types)
+
             f.write(f'person_{person_id}:\n')
             f.write(f'  gender: {most_common_gender}\n')
             f.write(f'  age: {most_common_age}\n')
+            f.write(f'  color: {most_common_color}\n')
+            f.write(f'  clothes: {most_common_clothes}\n')
             f.write(f'  frames: {frames}\n\n')
 
 def compute_image_quality(image):
@@ -86,10 +97,17 @@ def save_best_faces(image_files, output_folder):
 
 if __name__ == "__main__":
     try:
-        video_name = sys.argv[1]  # video_name 인수를 추가로 받음
-        user_id = sys.argv[2]
-        filter_gender = sys.argv[3].lower()
-        filter_age = sys.argv[4].lower()
+        video_name = "testVideo2"  # video_name 인수를 추가로 받음
+        user_id = "2025"
+        #filter_gender = sys.argv[3].lower()
+        #filter_age = sys.argv[4].lower()
+        #filter_color = sys.argv[5].lower()
+        #filter_clothes = sys.argv[6].lower()
+
+        filter_gender = "female"
+        filter_age = "youth"
+        filter_color = "white"
+        filter_clothes = "shortsleevetop"
 
         # "여성" 또는 "남성"을 "female" 또는 "male"로 변환
         if filter_gender == '여성':
@@ -105,7 +123,7 @@ if __name__ == "__main__":
                 folder_path = os.path.join(output_directory, video_folder)
                 if os.path.isdir(folder_path):
                     try:
-                        info_dict, image_files = gather_info_from_files(folder_path, filter_gender, filter_age)
+                        info_dict, image_files = gather_info_from_files(folder_path, filter_gender, filter_age, filter_color, filter_clothes)
 
                         output_file = os.path.join(output_directory, f"{video_folder}_info.txt")
                         save_info_to_txt(info_dict, output_file)
