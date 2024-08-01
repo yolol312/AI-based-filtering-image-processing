@@ -60,10 +60,11 @@ class FaceRecognizer:
     def compare_similarity(embedding1, embedding2):
         return np.dot(embedding1, embedding2) / (np.linalg.norm(embedding1) * np.linalg.norm(embedding2))
 
-    def recognize_faces(self, frame, frame_number, output_dir, video_name, gender_model, age_model):
+    def recognize_faces(self, frame, frame_number, output_dir, video_name, gender_model, age_model,color_model,clothes_model):
         original_shape = frame.shape[:2]
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         forward_embeddings = self.extract_embeddings(frame_rgb)
+         
 
         if forward_embeddings:
             for embedding, box, face_image, prob in forward_embeddings:
@@ -101,15 +102,13 @@ class FaceRecognizer:
                 # Get age prediction
                 if person_id not in self.age_predictions:
                     self.age_predictions[person_id] = {'frames': [], 'age': None}
-                
-                if len(self.age_predictions[person_id]['frames']) < 10:
-                    age = predict_age(face_image, age_model)
-                    self.age_predictions[person_id]['frames'].append(age)
-                else:
-                    if self.age_predictions[person_id]['age'] is None:
-                        most_common_age = Counter(self.age_predictions[person_id]['frames']).most_common(1)[0][0]
-                        self.age_predictions[person_id]['age'] = most_common_age
-                    age = self.age_predictions[person_id]['age']
+
+                age = predict_age(face_image, age_model)
+                self.age_predictions[person_id]['frames'].append(age)
+
+                # Determine the most common age from all frames
+                most_common_age = Counter(self.age_predictions[person_id]['frames']).most_common(1)[0][0]
+                self.age_predictions[person_id]['age'] = most_common_age
 
                 # Save face images only if they appear in at least 5 frames
                 if self.face_frame_count[person_id] >= 5:
@@ -144,8 +143,52 @@ def predict_age(face_image, age_model):
         return age_group[pred[0][0]]
     else:
         return "Unknown"
+    
+def predict_color(frame, color_model, bbox):
+        # 색상 예측을 위한 관심 영역(ROI) 추출
+        x1, y1, x2, y2 = bbox
+        roi = frame[y1:y2, x1:x2]
+        if roi.size == 0:  # ROI가 비어있다면 'unknown' 반환
+            return "unknown"
+        
+        # 색상 예측 수행
+        color_results = color_model.predict(source=[roi], save=False)[0]
+        
+        # 색상 이름 정의
+        color_names = {0: 'black', 1: 'white', 2: 'red', 3: 'yellow', 4: 'green', 5: 'blue', 6: 'brown'}
+        
+        if color_results.boxes.data.shape[0] > 0:
+            # 예측된 색상 클래스 추출
+            color_class = int(color_results.boxes.data[0][5])
+            return color_names.get(color_class, "unknown")
+        
+        # 예측이 없을 경우, 'unknown' 반환
+        return "unknown"
 
-def process_video(video_path, output_dir, yolo_model_path, gender_model_path, age_model_path, global_persons={}):
+def predict_clothes(frame, clothes_model, bbox):
+    # 옷 종류 예측을 위한 관심 영역(ROI) 추출
+    x1, y1, x2, y2 = bbox
+    roi = frame[y1:y2, x1:x2]
+    if roi.size == 0:  # ROI가 비어있다면 'unknown' 반환
+        return "unknown"
+    
+    # 옷 종류 예측 수행
+    clothes_results = clothes_model.predict(source=[roi], save=False)[0]
+    
+    # 옷 종류 이름 정의
+    clothes_names = {0: 'dress', 1: 'longsleevetop', 2: 'shortsleevetop', 3: 'vest', 4: 'shorts', 5: 'pants', 6: 'skirt'}
+    
+    if clothes_results.boxes.data.shape[0] > 0:
+        # 예측된 옷 종류 클래스 추출
+        clothes_class = int(clothes_results.boxes.data[0][5])
+        return clothes_names.get(clothes_class, "unknown")
+    
+    # 예측이 없을 경우, 'unknown' 반환
+    return "unknown"
+
+
+
+def process_video(video_path, output_dir, yolo_model_path, gender_model_path, age_model_path,color_model_path,clothes_model_path, global_persons={}):
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     recognizer = FaceRecognizer()
     recognizer.persons = global_persons
@@ -160,6 +203,8 @@ def process_video(video_path, output_dir, yolo_model_path, gender_model_path, ag
     age_model.load_state_dict(torch.load(age_model_path))
     age_model = age_model.to(device)
     age_model.eval()
+    color_model = YOLO(color_model_path)
+    clothes_model = YOLO(clothes_model_path) 
 
     frame_number = 0
 
@@ -172,7 +217,7 @@ def process_video(video_path, output_dir, yolo_model_path, gender_model_path, ag
         if frame_number % frame_interval != 0:
             continue
 
-        frame = recognizer.recognize_faces(frame, frame_number, output_dir, video_name, gender_model, age_model)
+        frame = recognizer.recognize_faces(frame, frame_number, output_dir, video_name, gender_model, age_model,color_model,clothes_model)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
@@ -182,22 +227,25 @@ def process_video(video_path, output_dir, yolo_model_path, gender_model_path, ag
 
     return recognizer.persons
 
-def process_videos(video_paths, output_dir, yolo_model_path, gender_model_path, age_model_path):
+def process_videos(video_paths, output_dir, yolo_model_path, gender_model_path, age_model_path,color_model_path,clothes_model_path):
     global_persons = {}
     for video_path in video_paths:
-        global_persons = process_video(video_path, output_dir, yolo_model_path, gender_model_path, age_model_path, global_persons)
+        global_persons = process_video(video_path, output_dir, yolo_model_path, gender_model_path, age_model_path,color_model_path,clothes_model_path, global_persons)
 
 if __name__ == "__main__":
     try:
-        user_no = sys.argv[2]
+        #user_no = sys.argv[2]
+        user_no = "hyojin"
         video_directory = f"./uploaded_videos/{user_no}/"
         video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.endswith(('.mp4', '.avi', '.mov'))]
         output_directory = f"./extracted_images/{user_no}/"
         yolo_model_path = './models/yolov8x.pt'
         gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_best.pth'
+        color_model_path = '/models/color_model.pt'
+        clothes_model_path = '/models/clothes_model.pt'
         
-        process_videos(video_paths, output_directory, yolo_model_path, gender_model_path, age_model_path)
+        process_videos(video_paths, output_directory, yolo_model_path, gender_model_path, age_model_path,color_model_path,clothes_model_path)
         
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
