@@ -254,15 +254,17 @@ def process_videos(video_paths, output_dir, yolo_model_path, gender_model_path, 
 
 if __name__ == "__main__":
     try:
-        user_no = sys.argv[2]
+        user_no = "2025"
         video_directory = f"./uploaded_videos/{user_no}/"
         video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.endswith(('.mp4', '.avi', '.mov'))]
         output_directory = f"./extracted_images/{user_no}/"
         yolo_model_path = './models/yolov8x.pt'
         gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_best.pth'
+        color_model_path = './models/color_model.pt'
+        clothes_model_path = './models/clothes_class.pt'
         
-        process_videos(video_paths, output_directory, yolo_model_path, gender_model_path, age_model_path)
+        process_videos(video_paths, output_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path)
         
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
