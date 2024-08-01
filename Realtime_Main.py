@@ -1,6 +1,6 @@
 import cv2
-import sys
 import os
+import sys
 import torch
 import numpy as np
 from facenet_pytorch import MTCNN, InceptionResnetV1
@@ -53,14 +53,25 @@ class FaceRecognizer:
         
         return [new_x1, new_y1, new_x2, new_y2]
 
+    def detect_persons(self, frame, yolo_model):
+        print("Detecting persons...")
+        yolo_results = yolo_model.predict(source=[frame], save=False)[0]
+        person_detections = [
+            (int(data[0]), int(data[1]), int(data[2]), int(data[3]))
+            for data in yolo_results.boxes.data.tolist()
+            if float(data[4]) >= 0.85 and int(data[5]) == 0
+        ]
+        return person_detections
+
     @staticmethod
     def compare_similarity(embedding1, embedding2):
         return np.dot(embedding1, embedding2) / (np.linalg.norm(embedding1) * np.linalg.norm(embedding2))
 
-    def recognize_faces(self, frame, frame_number, output_dir, image_name, gender_model, age_model):
+    def recognize_faces(self, frame, frame_number, output_dir, image_name, yolo_model, gender_model, age_model, color_model, clothes_model):
         original_shape = frame.shape[:2]
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         forward_embeddings = self.extract_embeddings(frame_rgb)
+        person_detections = self.detect_persons(frame, yolo_model)
 
         if forward_embeddings:
             for embedding, box, face_image, prob in forward_embeddings:
@@ -105,17 +116,27 @@ class FaceRecognizer:
                 most_common_age = Counter(self.age_predictions[person_id]['frames']).most_common(1)[0][0]
                 self.age_predictions[person_id]['age'] = most_common_age
 
-                # Save face images only if they appear in at least 5 frames
-                if self.face_frame_count[person_id] >= 5:
-                    output_folder = os.path.join(output_dir, f'{image_name}_face')
-                    os.makedirs(output_folder, exist_ok=True)
-                    face_image_resized = cv2.resize(face_image, (160, 160))
-                    output_path = os.path.join(output_folder, f'person_{person_id}_frame_{frame_number}_gender_{gender}_age_{age}.jpg')
-                    cv2.imwrite(output_path, cv2.cvtColor(face_image_resized, cv2.COLOR_RGB2BGR))
-                    print(f"Saved image: {output_path}, person ID: {person_id}, detection probability: {prob}")
+                # Find the person detection box corresponding to this face box
+                for person_box in person_detections:
+                    px1, py1, px2, py2 = person_box
+                    fx1, fy1, fx2, fy2 = box
+                    if fx1 >= px1 and fx2 <= px2 and fy1 >= py1 and fy2 <= py2:
+                        # Get color prediction
+                        color = predict_color(frame, color_model, person_box)
+
+                        # Get clothes prediction
+                        clothes = predict_clothes(frame, clothes_model, person_box)
+
+                        # Save face images only if they appear in at least 5 frames
+                        if self.face_frame_count[person_id] >= 5:
+                            output_folder = os.path.join(output_dir, f'{image_name}_face')
+                            os.makedirs(output_folder, exist_ok=True)
+                            face_image_resized = cv2.resize(face_image, (160, 160))
+                            output_path = os.path.join(output_folder, f'person_{person_id}_frame_{frame_number}_gender_{gender}_age_{age}_color_{color}_clothes_{clothes}.jpg')
+                            cv2.imwrite(output_path, cv2.cvtColor(face_image_resized, cv2.COLOR_RGB2BGR))
+                            print(f"Saved image: {output_path}, person ID: {person_id}, detection probability: {prob}")
 
         return frame
-
 
 def predict_gender(face_image, gender_model):
     face_rgb = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
@@ -140,6 +161,36 @@ def predict_age(face_image, age_model):
     else:
         return "Unknown"
 
+def predict_color(frame, color_model, bbox):
+    x1, y1, x2, y2 = bbox
+    roi = frame[y1:y2, x1:x2]
+    if roi.size == 0:
+        return "unknown"
+    
+    color_results = color_model.predict(source=[roi], save=False)[0]
+    color_names = {0: 'black', 1: 'white', 2: 'red', 3: 'yellow', 4: 'green', 5: 'blue', 6: 'brown'}
+    
+    if color_results.boxes.data.shape[0] > 0:
+        color_class = int(color_results.boxes.data[0][5])
+        return color_names.get(color_class, "unknown")
+    
+    return "unknown"
+
+def predict_clothes(frame, clothes_model, bbox):
+    x1, y1, x2, y2 = bbox
+    roi = frame[y1:y2, x1:x2]
+    if roi.size == 0:
+        return "unknown"
+    
+    clothes_results = clothes_model.predict(source=[roi], save=False)[0]
+    clothes_names = {0: 'dress', 1: 'longsleevetop', 2: 'shortsleevetop', 3: 'vest', 4: 'shorts', 5: 'pants', 6: 'skirt'}
+    
+    if clothes_results.boxes.data.shape[0] > 0:
+        clothes_class = int(clothes_results.boxes.data[0][5])
+        return clothes_names.get(clothes_class, "unknown")
+    
+    return "unknown"
+
 def create_video(image_paths, output_video_directory, fps=24):
     os.makedirs(output_video_directory, exist_ok=True)
     video_name = "realtime"
@@ -158,7 +209,7 @@ def create_video(image_paths, output_video_directory, fps=24):
     video_writer.release()
     print(f"Video saved to {video_output_path}")
 
-def process_images(image_paths, output_image_directory, yolo_model_path, gender_model_path, age_model_path, output_video_directory, fps=24):
+def process_images(image_paths, output_image_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, output_video_directory, fps=24):
     recognizer = FaceRecognizer()
     yolo_model = YOLO(yolo_model_path)
     gender_model = YOLO(gender_model_path)
@@ -166,6 +217,8 @@ def process_images(image_paths, output_image_directory, yolo_model_path, gender_
     age_model.load_state_dict(torch.load(age_model_path))
     age_model = age_model.to(device)
     age_model.eval()
+    color_model = YOLO(color_model_path)
+    clothes_model = YOLO(clothes_model_path)
 
     num_images = len(image_paths) - (len(image_paths) % 24)
     image_paths = image_paths[:num_images]
@@ -178,7 +231,7 @@ def process_images(image_paths, output_image_directory, yolo_model_path, gender_
         start_time = os.path.splitext(os.path.basename(image_path))[0]
         image_name = "realtime"
         image = cv2.imread(image_path)
-        recognizer.recognize_faces(image, frame_number, output_image_directory, image_name, gender_model, age_model)
+        recognizer.recognize_faces(image, frame_number, output_image_directory, image_name, yolo_model, gender_model, age_model, color_model, clothes_model)
         frame_number += 1
 
 if __name__ == "__main__":
@@ -191,8 +244,10 @@ if __name__ == "__main__":
         yolo_model_path = './models/yolov8x.pt'
         gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_best.pth'
+        color_model_path = './models/color_model.pt'
+        clothes_model_path = './models/clothes_class.pt'
         
-        process_images(image_paths, output_image_directory, yolo_model_path, gender_model_path, age_model_path, output_video_directory)
+        process_images(image_paths, output_image_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, output_video_directory)
         
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
