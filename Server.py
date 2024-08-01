@@ -263,14 +263,20 @@ def parse_info_file(file_path):
             person_id_match = re.search(r'(\d+):', person)
             gender_match = re.search(r'gender: (\w+)', person)
             age_match = re.search(r'age: (\w+)', person)
+            color_match = re.search(r'color: (\w+)', person)
+            clothes_match = re.search(r'clothes: (\w+)', person)
             if person_id_match and gender_match and age_match:
                 person_id = person_id_match.group(1)
                 gender = gender_match.group(1)
                 age = age_match.group(1)
+                color = color_match.group(1)
+                clothes = clothes_match.group(1)
                 person_info.append({
                     'person_id': person_id,
                     'gender': gender,
-                    'age': age
+                    'age': age,
+                    'color': color,
+                    'clothes': clothes
                 })
     return person_info
 
@@ -316,8 +322,8 @@ def save_to_db(person_info, or_video_id, user_id, user_no, filter_id):
                     or_video_id,
                     person['age'],
                     person['gender'],
-                    '',  # person_color
-                    '',  # person_clothes
+                    person['color'],  # person_color
+                    person['clothes'],  # person_clothes
                     '',  # person_face
                     face_image_relative_path,  # person_origin_face
                     user_no,
@@ -375,8 +381,8 @@ def save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id,
                     or_video_id,
                     person['age'],
                     person['gender'],
-                    '',  # person_color
-                    '',  # person_clothes
+                    person['color'],  # person_color
+                    person['clothes'],  # person_clothes
                     image_path,  # person_face
                     face_image_relative_path,  # person_origin_face
                     user_no,
@@ -610,7 +616,7 @@ def process_save_face_info_with_image(video_name, user_id, or_video_id, filter_i
             return
         # save_face_info6.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
-            ["python", "Save_info_with_image.py", video_name, str(user_id), filter_gender, filter_age, image_path], 
+            ["python", "Save_info_with_image.py", video_name, str(user_id), filter_gender, filter_age, filter_color, filter_clothes, image_path], 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = process.communicate()
@@ -688,22 +694,6 @@ def process_video_with_images(video_name, user_id, filter_id, image_path, clip_f
 
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
-
-# WebRTC 신호 처리
-@socketio.on('offer')
-def handle_offer(data):
-    print('Offer received:', data)
-    emit('offer', data, broadcast=True, include_self=False)
-
-@socketio.on('answer')
-def handle_answer(data):
-    print('Answer received:', data)
-    emit('answer', data, broadcast=True, include_self=False)
-
-@socketio.on('ice-candidate')
-def handle_ice_candidate(data):
-    print('ICE Candidate received:', data)
-    emit('ice-candidate', data, broadcast=True, include_self=False)
 
 # 0. 실시간 웹캠 이미지 전송(Post)
 @app.route('/upload_image_<int:webcam_id>', methods=['POST'])
