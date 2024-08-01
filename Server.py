@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, render_template
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import os, base64
@@ -6,6 +6,9 @@ import pymysql
 import subprocess
 import threading
 import re
+import numpy as np
+import cv2
+from datetime import datetime
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -22,6 +25,14 @@ def get_db_connection():
         cursorclass=pymysql.cursors.DictCursor
     )
 
+# 각 웹캠의 이미지가 저장될 폴더 경로 설정
+SAVE_FOLDER = 'saved_images'
+WEBCAM_FOLDERS = [f"webcam_{i}" for i in range(4)]
+
+# 폴더가 없으면 생성
+for folder in WEBCAM_FOLDERS:
+    os.makedirs(os.path.join(SAVE_FOLDER, folder), exist_ok=True)
+
 # 파일 저장 경로 설정
 VIDEO_SAVE_PATH = 'uploaded_videos'
 IMAGE_SAVE_PATH = 'uploaded_images'
@@ -29,6 +40,27 @@ IMAGE_SAVE_PATH = 'uploaded_images'
 # 디렉토리 생성
 os.makedirs(VIDEO_SAVE_PATH, exist_ok=True)
 os.makedirs(IMAGE_SAVE_PATH, exist_ok=True)
+
+# video_path를 DB에서 얻어오는 함수
+def get_video_path(user_id, pro_video_name):
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            # 사용자 번호 가져오기
+            cursor.execute("SELECT user_no FROM user WHERE user_id = %s", (user_id,))
+            user = cursor.fetchone()
+            if not user:
+                return None
+            user_no = user['user_no']
+            
+            # 동영상 경로 가져오기
+            cursor.execute("SELECT pro_video_content FROM processed_video WHERE user_no = %s AND pro_video_name = %s", (user_no, pro_video_name))
+            video = cursor.fetchone()
+            if not video:
+                return None
+            return video['pro_video_content']
+    finally:
+        connection.close()
 
 #person 정보별 이미지 가져오기
 def get_image_paths_for_person_nos(person_nos):
@@ -358,7 +390,6 @@ def save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id,
         connection.close()
     return saved_paths
 
-
 # 클립 처리 함수
 def clip_video(video_name, user_id, or_video_id):
     try:
@@ -658,7 +689,6 @@ def process_video_with_images(video_name, user_id, filter_id, image_path, clip_f
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-
 # WebRTC 신호 처리
 @socketio.on('offer')
 def handle_offer(data):
@@ -674,6 +704,104 @@ def handle_answer(data):
 def handle_ice_candidate(data):
     print('ICE Candidate received:', data)
     emit('ice-candidate', data, broadcast=True, include_self=False)
+
+# 0. 실시간 웹캠 이미지 전송(Post)
+@app.route('/upload_image_<int:webcam_id>', methods=['POST'])
+def upload_image(webcam_id):
+
+    data = request.get_json()
+    # JSON 데이터가 제대로 수신되지 않았을 경우 확인
+    if not data:
+        return jsonify({"status": "error", "message": "No JSON data received"}), 400
+    
+    # 수신된 데이터가 문자열이 아닌 JSON 객체인지 확인
+    if isinstance(data, str):
+        return jsonify({"status": "error", "message": "Invalid JSON data format"}), 400
+    
+    user_data = data.get('user_data', {})
+    user_id = user_data.get('user_id', '')
+    
+    if webcam_id < 0 or webcam_id >= len(WEBCAM_FOLDERS):
+        return jsonify({"error": "Invalid webcam ID"}), 400
+
+    if 'image' not in request.files:
+        return jsonify({"error": "No image provided"}), 400
+    
+    file = request.files['image']
+    img_array = np.frombuffer(file.read(), np.uint8)
+    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+
+    if img is None:
+        return jsonify({"error": "Image decoding failed"}), 500
+    
+
+    # 이미지 파일 저장
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    
+    videoname = f"{user_id}_realtime"
+    filename = f"{timestamp}_{videoname}.jpg"
+    folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id])
+    filepath = os.path.join(folder_path, filename)
+    cv2.imwrite(filepath, img)
+    
+    print(f"Received and saved image from webcam {webcam_id} with shape: {img.shape} as {filename}")
+    
+    return jsonify({"message": "Image received and saved"}), 200
+
+# 동영상 스트리밍 엔드포인트
+@app.route('/stream_video', methods=['GET'])
+def stream_video():
+    user_id = request.args.get('user_id')
+    pro_video_name = request.args.get('pro_video_name')
+    print("user_id:", user_id)  # 디버깅 메시지 추가
+    print("pro_video_name:", pro_video_name)  # 디버깅 메시지 추가
+
+    video_path = get_video_path(user_id, pro_video_name)
+    if not video_path:
+        return jsonify({"error": "Invalid user_id or pro_video_name"}), 404
+
+    if not os.path.exists(video_path):
+        return jsonify({"error": "Video file not found"}), 404
+
+    def generate():
+        with open(video_path, 'rb') as f:
+            while True:
+                chunk = f.read(1024*1024)
+                if not chunk:
+                    break
+                yield chunk
+
+    range_header = request.headers.get('Range', None)
+    if not range_header:
+        return Response(generate(), mimetype='video/mp4')
+
+    size = os.path.getsize(video_path)
+    byte1, byte2 = 0, None
+
+    if '-' in range_header:
+        byte1, byte2 = range_header.replace('bytes=', '').split('-')
+    
+    byte1 = int(byte1)
+    if byte2:
+        byte2 = int(byte2)
+        length = byte2 - byte1 + 1
+    else:
+        length = size - byte1
+
+    def generate_range():
+        with open(video_path, 'rb') as f:
+            f.seek(byte1)
+            remaining_length = length
+            while remaining_length > 0:
+                chunk = f.read(min(1024*1024, remaining_length))
+                if not chunk:
+                    break
+                remaining_length -= len(chunk)
+                yield chunk
+
+    rv = Response(generate_range(), 206, mimetype='video/mp4')
+    rv.headers.add('Content-Range', f'bytes {byte1}-{byte1 + length - 1}/{size}')
+    return rv
 
 # 1. 파일 업로드 엔드포인트(Post)
 @app.route('/upload_file', methods=['POST'])
@@ -812,9 +940,6 @@ def upload_file():
         print(f"An unexpected error occurred: {str(e)}")
         return jsonify({"status": "error", "message": f"An unexpected error occurred: {str(e)}"}), 500
 
-
-
-
 # 2.회원가입 엔드포인트(Post)
 @app.route('/receive_data', methods=['POST'])
 def receive_data():
@@ -923,23 +1048,39 @@ def login():
                 cursor.execute(map_camera_sql, (user_no,))
                 map_camera_result = cursor.fetchall()
 
-                person_sql = """
+                # ProVideo, Person 정보 가져오기
+                provideo_person_sql = """
                     SELECT 
-                        p.person_no,
-                        p.person_id,
-                        pv.pro_video_id,
-                        p.person_age,
-                        p.person_gender,
-                        p.person_color,
-                        p.person_clothes,
-                        p.person_face,
-                        p.person_origin_face
-                    FROM person p
-                    JOIN processed_video pv ON p.or_video_id = pv.or_video_id
-                    WHERE p.user_no = %s
+                        pro_video_name, 
+                        video.filter_id, 
+                        person_id, 
+                        person_age, 
+                        person_gender, 
+                        person_color, 
+                        person_clothes, 
+                        person_face
+                    FROM user, person, processed_video AS video
+                    WHERE user.user_no = person.user_no 
+                        AND user.user_no = video.user_no 
+                        AND person.or_video_id = video.or_video_id 
+                        AND person.filter_id = video.filter_id
+                        AND user.user_no = %s
                 """
-                cursor.execute(person_sql, (user_no,))
-                person_result = cursor.fetchall()
+                cursor.execute(provideo_person_sql, (user_no,))
+                provideo_person_result = cursor.fetchall()
+
+                # Cam Name 정보 가져오기
+                camname_sql = """
+                    SELECT 
+                        cam_name
+                    FROM user, processed_video as p_video, origin_video as o_video, camera
+                    WHERE user.user_no = p_video.user_no
+                    AND p_video.or_video_id = o_video.or_video_id
+                    AND o_video.cam_num = camera.cam_num
+                    AND user.user_no = %s
+                """
+                cursor.execute(camname_sql, (user_no,))
+                camname_result = cursor.fetchall()
 
                 # Clip 정보 가져오기
                 clip_sql = """
@@ -954,17 +1095,19 @@ def login():
                 cursor.execute(clip_sql, (user_no,))
                 clip_result = cursor.fetchall()
 
-                map_camera_dict = [dict(row) for row in map_camera_result]
-                person_dict = [dict(row) for row in person_result]
-                clip_dict = [dict(row) for row in clip_result]
+                map_camera_dict = [dict(row) for row in map_camera_result] if map_camera_result else []
+                provideo_person_dict = [dict(row) for row in provideo_person_result] if provideo_person_result else []
+                camname_dict = [dict(row) for row in camname_result] if camname_result else []
+                clip_dict = [dict(row) for row in clip_result] if clip_result else []
 
                 response_data = {
                     "message": "Login successful",
                     "user_id": user_id,
                     "user_name": user_name,
                     "map_camera_info": map_camera_dict,
-                    "person_info": person_dict,
-                    "clip_info": clip_dict  # 클립 정보 추가
+                    "provideo_person_info": provideo_person_dict,
+                    "camname_info": camname_dict,
+                    "clip_info": clip_dict
                 }
 
                 return jsonify(response_data), 200
@@ -1042,7 +1185,7 @@ def upload_map():
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
 # 5.지도 마커 위치 엔드포인트(Post)
-@app.route('/upload_markers', methods=['POST'])
+@app.route('/upload_cams', methods=['POST'])
 def upload_cameras():
     try:
         data = request.get_json()
@@ -1106,13 +1249,29 @@ def upload_cameras():
         print(f"An error occurred: {str(e)}")
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-# 6. upload_maps 엔드포인트 (GET)
-@app.route('/upload_maps', methods=['GET'])
+# 6.지도 업데이트 엔드포인트 (GET)
+@app.route('/update_maps', methods=['GET'])
 def upload_maps():
+    user_id = request.args.get('user_id')
+    
+    if not user_id:
+        return jsonify({"error": "User ID is required"}), 400
+
     connection = get_db_connection()
     cursor = connection.cursor()
 
     try:
+        # user_id를 기반으로 user_no를 찾기
+        user_sql = "SELECT user_no FROM user WHERE user_id = %s"
+        cursor.execute(user_sql, (user_id,))
+        user_result = cursor.fetchone()
+
+        if user_result is None:
+            return jsonify({"error": "User not found"}), 404
+
+        user_no = user_result['user_no']
+
+        # user_no를 기반으로 map_camera_info를 가져오기
         map_camera_sql = """
             SELECT 
                 m.address, 
@@ -1123,8 +1282,9 @@ def upload_maps():
                 c.cam_longitude
             FROM map m
             LEFT JOIN camera c ON m.map_num = c.map_num
+            WHERE m.user_no = %s
         """
-        cursor.execute(map_camera_sql)
+        cursor.execute(map_camera_sql, (user_no,))
         map_camera_result = cursor.fetchall()
 
         map_camera_dict = [dict(row) for row in map_camera_result]
