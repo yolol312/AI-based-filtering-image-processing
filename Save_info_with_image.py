@@ -3,15 +3,26 @@ import os
 import re
 import shutil
 import cv2
+import torch
+import numpy as np
+from facenet_pytorch import InceptionResnetV1
+from torchvision import transforms
+from PIL import Image
 from collections import Counter
+
+# 얼굴 임베딩 모델 초기화
+model = InceptionResnetV1(pretrained='vggface2').eval()
+transform = transforms.Compose([transforms.Resize((160, 160)),
+                                transforms.ToTensor(),
+                                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
 
 def parse_filename(filename):
     match = re.match(r'person_(\d+)_frame_(\d+)_gender_(\w+)_age_(\w+)\.jpg', filename)
     if match:
         person_id = int(match.group(1))
         frame = int(match.group(2))
-        gender = match.group(3).lower()  # 소문자로 변환하여 비교를 쉽게 만듭니다
-        age = match.group(4).lower()  # 소문자로 변환하여 비교를 쉽게 만듭니다
+        gender = match.group(3).lower()
+        age = match.group(4).lower()
         return person_id, frame, gender, age
     return None
 
@@ -25,7 +36,6 @@ def gather_info_from_files(directory, filter_gender, filter_age):
             if parsed_info:
                 person_id, frame, gender, age = parsed_info
                 
-                # 필터 조건을 만족하는 경우에만 처리
                 if (filter_gender == 'any' or filter_gender == gender) and (filter_age == 'any' or filter_age == age):
                     if person_id not in info_dict:
                         info_dict[person_id] = []
@@ -42,38 +52,62 @@ def get_most_common(values):
     most_common = counter.most_common(1)
     return most_common[0][0] if most_common else None
 
-def save_info_to_txt(info_dict, output_file):
+def save_info_to_txt(info_dict, image_files, target_embedding, output_file, threshold=0.6):
     with open(output_file, 'w') as f:
         for person_id in sorted(info_dict.keys()):
-            frames = [frame for frame, gender, age in info_dict[person_id]]
-            genders = [gender for frame, gender, age in info_dict[person_id]]
-            ages = [age for frame, gender, age in info_dict[person_id]]
-            most_common_gender = get_most_common(genders)
-            most_common_age = get_most_common(ages)
+            # 해당 person_id의 이미지 파일들을 가져옵니다.
+            relevant_files = [file for file in image_files if file[0] == person_id]
+            matching_files = []
+            for _, filepath in relevant_files:
+                embedding = compute_face_embedding(filepath)
+                similarity = compare_similarity(embedding, target_embedding)
+                if similarity >= threshold:
+                    matching_files.append(filepath)
             
-            f.write(f'person_{person_id}:\n')
-            f.write(f'  gender: {most_common_gender}\n')
-            f.write(f'  age: {most_common_age}\n')
-            f.write(f'  frames: {frames}\n\n')
+            if matching_files:
+                frames = [frame for frame, gender, age in info_dict[person_id]]
+                genders = [gender for frame, gender, age in info_dict[person_id]]
+                ages = [age for frame, gender, age in info_dict[person_id]]
+                most_common_gender = get_most_common(genders)
+                most_common_age = get_most_common(ages)
+                
+                f.write(f'person_{person_id}:\n')
+                f.write(f'  gender: {most_common_gender}\n')
+                f.write(f'  age: {most_common_age}\n')
+                f.write(f'  frames: {frames}\n\n')
 
 def compute_image_quality(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     score = cv2.Laplacian(gray, cv2.CV_64F).var()
     return score
 
-def save_best_faces(image_files, output_folder):
+def compute_face_embedding(image_path):
+    image = Image.open(image_path).convert('RGB')
+    image = transform(image).unsqueeze(0)
+    with torch.no_grad():
+        embedding = model(image).numpy().flatten()
+    return embedding
+
+def compare_similarity(embedding1, embedding2):
+    return np.dot(embedding1, embedding2) / (np.linalg.norm(embedding1) * np.linalg.norm(embedding2))
+
+def save_best_faces(image_files, output_folder, target_embedding, threshold=0.6):
     person_images = {}
 
     for person_id, filepath in image_files:
         try:
-            image = cv2.imread(filepath)
-            quality_score = compute_image_quality(image)
+            embedding = compute_face_embedding(filepath)
+            similarity = compare_similarity(embedding, target_embedding)
 
-            if person_id not in person_images:
-                person_images[person_id] = (filepath, quality_score)
-            else:
-                if quality_score > person_images[person_id][1]:
+            if similarity >= threshold:
+                image = cv2.imread(filepath)
+                quality_score = compute_image_quality(image)
+
+                if person_id not in person_images:
                     person_images[person_id] = (filepath, quality_score)
+                else:
+                    if quality_score > person_images[person_id][1]:
+                        person_images[person_id] = (filepath, quality_score)
         except Exception as e:
             print(f"Error processing file {filepath}: {e}")
 
@@ -86,19 +120,21 @@ def save_best_faces(image_files, output_folder):
 
 if __name__ == "__main__":
     try:
-        video_name = sys.argv[1]  # video_name 인수를 추가로 받음
+        video_name = sys.argv[1]
         user_id = sys.argv[2]
         filter_gender = sys.argv[3].lower()
         filter_age = sys.argv[4].lower()
+        reference_image_path = sys.argv[5]
 
-        # "여성" 또는 "남성"을 "female" 또는 "male"로 변환
         if filter_gender == '여성':
             filter_gender = 'female'
         elif filter_gender == '남성':
             filter_gender = 'male'
 
         output_directory = f"./extracted_images/{user_id}/"
-        os.makedirs(output_directory, exist_ok=True)  # 디렉토리를 미리 생성합니다.
+        os.makedirs(output_directory, exist_ok=True)
+
+        target_embedding = compute_face_embedding(reference_image_path)
 
         for video_folder in os.listdir(output_directory):
             if '_face' in video_folder:
@@ -108,11 +144,11 @@ if __name__ == "__main__":
                         info_dict, image_files = gather_info_from_files(folder_path, filter_gender, filter_age)
 
                         output_file = os.path.join(output_directory, f"{video_folder}_info.txt")
-                        save_info_to_txt(info_dict, output_file)
+                        save_info_to_txt(info_dict, image_files, target_embedding, output_file)
                         print(f"Information saved to {output_file}")
 
                         clip_folder = folder_path.replace('_face', '_clip')
-                        save_best_faces(image_files, clip_folder)
+                        save_best_faces(image_files, clip_folder, target_embedding)
                     except Exception as e:
                         print(f"Error processing folder {folder_path}: {e}")
     except Exception as e:
