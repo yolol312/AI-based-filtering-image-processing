@@ -192,7 +192,7 @@ def update_person_face_from_clip(person_no):
 
             # 첫 번째 업로드된 이미지 파일 사용 (필요에 따라 선택 방법 변경 가능)
             uploaded_image_name = user_image_files[0]
-            person_face_relative_path = os.path.join(user_image_dir, uploaded_image_name)
+            person_face_relative_path = os.path.join(user_image_dir, uploaded_image_name).replace("\\", "/")
 
             # person 테이블 업데이트
             sql = """
@@ -365,7 +365,7 @@ def save_to_db(person_info, or_video_id, user_id, user_no, filter_id):
                 face_name = face_files[0]
 
                 # 상대 경로로 저장
-                face_image_relative_path = os.path.join(person_image_dir, face_name)
+                face_image_relative_path = os.path.join(person_image_dir, face_name).replace("\\", "/")
                 sql = """
                     INSERT INTO person (person_id, or_video_id, person_age, person_gender, person_color, person_clothes, person_face, person_origin_face, user_no, filter_id)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -422,7 +422,7 @@ def save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id,
                 face_name = face_files[0]
 
                 # 상대 경로로 저장
-                face_image_relative_path = os.path.join(person_image_dir, face_name)
+                face_image_relative_path = os.path.join(person_image_dir, face_name).replace("\\", "/")
                 sql = """
                     INSERT INTO person (person_id, or_video_id, person_age, person_gender, person_color, person_clothes, person_face, person_origin_face, user_no, filter_id)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -552,14 +552,12 @@ def save_processed_video_info_without_image(video_name, user_id, user_no, or_vid
             return
         
         pro_video_name = f"{video_name}_output.mp4"
-        pro_video_path = os.path.abspath(os.path.join(extracted_dir, pro_video_name))
+        pro_video_path = os.path.abspath(os.path.join(extracted_dir, pro_video_name)).replace("\\", "/")
         
         if not os.path.exists(pro_video_path):
             print(f"No processed video file found: {pro_video_path}")
             return
         
-        # Replace backslashes with forward slashes
-        pro_video_path = pro_video_path.replace('\\', '/')
         connection = get_db_connection()
         try:
             with connection.cursor() as cursor:
@@ -609,8 +607,7 @@ def save_processed_video_info_with_image(video_name, user_id, user_no, or_video_
                         
                         for video_file in video_files:
                             pro_video_name = f"{video_name}_{video_file}"
-                            pro_video_path = os.path.abspath(os.path.join(person_folder_path, video_file))
-                            pro_video_path = pro_video_path.replace('\\', '/')
+                            pro_video_path = os.path.abspath(os.path.join(person_folder_path, video_file)).replace("\\", "/")
                             # 중복 체크 로직 추가
                             sql_check = """
                                 SELECT COUNT(*) as count FROM processed_video 
@@ -740,8 +737,7 @@ def process_video_without_images(video_name, user_id, filter_id, clip_flag=True)
         else:
             print("Main.py 얼굴정보추출 성공")
             # 얼굴정보추출 성공 후 save_face_info6.py 실행
-            video_path = os.path.join('uploaded_videos', user_id, video_name + ".mp4")  # 파일 절대 경로로 변경
-            video_path = video_path.replace("\\", "/")
+            video_path = os.path.join('uploaded_videos', user_id, video_name + ".mp4").replace("\\", "/")
             or_video_id = get_or_video_id_by_path(video_path)
             if or_video_id is not None:
                 process_save_face_info_without_image(video_name, user_id, or_video_id, filter_id, clip_flag)
@@ -764,8 +760,7 @@ def process_video_with_images(video_name, user_id, filter_id, image_path, clip_f
         else:
             print("Main.py 얼굴정보추출 성공")
             # 얼굴정보추출 성공 후 save_face_info6.py 실행
-            video_path = os.path.join('uploaded_videos', user_id, video_name + ".mp4")  # 파일 절대 경로로 변경
-            video_path = video_path.replace("\\", "/")
+            video_path = os.path.join('uploaded_videos', user_id, video_name + ".mp4").replace("\\", "/")
             or_video_id = get_or_video_id_by_path(video_path)
             if or_video_id is not None:
                 process_save_face_info_with_image(video_name, user_id, or_video_id, filter_id, image_path, clip_flag)
@@ -809,7 +804,7 @@ def upload_image(webcam_id):
     videoname = f"{user_id}_realtime"
     filename = f"{timestamp}_{videoname}.jpg"
     folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id])
-    filepath = os.path.join(folder_path, filename)
+    filepath = os.path.join(folder_path, filename).replace("\\", "/")
     cv2.imwrite(filepath, img)
     
     print(f"Received and saved image from webcam {webcam_id} with shape: {img.shape} as {filename}")
@@ -868,7 +863,7 @@ def get_Person_to_clip():
 
             filter_id = get_filter_id_by_person_no(person_no)
             # 첫 번째 이미지를 사용하여 트래킹 비디오 생성 (필요에 따라 다른 선택 방법 사용 가능)
-            image_path = os.path.join(image_dir, image_files[0])
+            image_path = os.path.join(image_dir, image_files[0]).replace("\\", "/")
             
             def tracking_callback():
                 clip_video(video_name, user_id, or_video_id)
@@ -1076,8 +1071,7 @@ def upload_file():
 
                 if video_name and video_content_base64:
                     video_content = base64.b64decode(video_content_base64)
-                    video_path = os.path.join(user_video_path, video_name)
-                    video_path = video_path.replace("\\", "/")
+                    video_path = os.path.join(user_video_path, video_name).replace("\\", "/")
                     with open(video_path, 'wb') as video_file:
                         video_file.write(video_content)
 
@@ -1112,7 +1106,7 @@ def upload_file():
             image_path = None
             if image_name and image_content_base64:
                 image_content = base64.b64decode(image_content_base64)
-                image_path = os.path.join(user_image_path, image_name)
+                image_path = os.path.join(user_image_path, image_name).replace("\\", "/")
 
                 with open(image_path, 'wb') as image_file:
                     image_file.write(image_content)
