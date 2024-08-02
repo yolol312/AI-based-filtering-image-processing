@@ -476,6 +476,7 @@ def clip_video(video_name, user_id, or_video_id):
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
+
 # 트래킹 처리 함수 (이미지 없을 때)
 def tracking_video_without_image(video_name, user_id, or_video_id, filter_id, saved_paths):
     try:
@@ -521,6 +522,7 @@ def tracking_video_with_image_callback(video_name, user_id, or_video_id, filter_
         print(f"An unexpected error occurred: {str(e)}")
         if callback:
             callback()
+
 
 # 트래킹 처리 함수 (이미지 있을 때)
 def tracking_video_with_image(video_name, user_id, or_video_id, filter_id, saved_paths):
@@ -587,7 +589,7 @@ def save_processed_video_info_without_image(video_name, user_id, user_no, or_vid
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
     
-# 트래킹 영상 정보 저장 (이미지 있을 때)
+# 트래킹 영상 정보 저장 (이미지 있을 때)    
 def save_processed_video_info_with_image(video_name, user_id, user_no, or_video_id, filter_id):
     try:
         extracted_dir = f'./extracted_images/{user_id}/{video_name}_clip'
@@ -607,7 +609,8 @@ def save_processed_video_info_with_image(video_name, user_id, user_no, or_video_
                         
                         for video_file in video_files:
                             pro_video_name = f"{video_name}_{video_file}"
-                            pro_video_path = os.path.abspath(os.path.join(person_folder_path, video_file)).replace("\\", "/")
+                            pro_video_path = os.path.abspath(os.path.join(person_folder_path, video_file))
+                            pro_video_path = pro_video_path.replace('\\', '/')  # 경로를 슬래시로 변경
                             # 중복 체크 로직 추가
                             sql_check = """
                                 SELECT COUNT(*) as count FROM processed_video 
