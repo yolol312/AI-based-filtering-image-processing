@@ -26,16 +26,16 @@ def get_db_connection():
     )
 
 # 각 웹캠의 이미지가 저장될 폴더 경로 설정
-SAVE_FOLDER = 'saved_images'
-WEBCAM_FOLDERS = [f"webcam_{i}" for i in range(4)]
+SAVE_FOLDER = os.path.abspath('saved_images').replace("\\", "/")
+WEBCAM_FOLDERS = [os.path.abspath(f"webcam_{i}").replace("\\", "/") for i in range(4)]
 
 # 폴더가 없으면 생성
 for folder in WEBCAM_FOLDERS:
-    os.makedirs(os.path.join(SAVE_FOLDER, folder), exist_ok=True)
+    os.makedirs(folder, exist_ok=True)
 
 # 파일 저장 경로 설정
-VIDEO_SAVE_PATH = 'uploaded_videos'
-IMAGE_SAVE_PATH = 'uploaded_images'
+VIDEO_SAVE_PATH = os.path.abspath('uploaded_videos').replace("\\", "/")
+IMAGE_SAVE_PATH = os.path.abspath('uploaded_images').replace("\\", "/")
 
 # 디렉토리 생성
 os.makedirs(VIDEO_SAVE_PATH, exist_ok=True)
@@ -62,7 +62,7 @@ def get_filter_id_by_person_no(person_no):
 
 #클립추출을 위한 트래킹 영상이 존재하는지 확인
 def does_video_file_exist(user_id, video_name, person_id):
-    video_dir = f'./extracted_images/{user_id}/{video_name}_clip/person_{person_id}/'
+    video_dir = os.path.abspath(f'./extracted_images/{user_id}/{video_name}_clip/person_{person_id}/').replace("\\", "/")
     if not os.path.exists(video_dir):
         print(f"Directory does not exist: {video_dir}")
         return False
@@ -176,10 +176,8 @@ def update_person_face_from_clip(person_no):
 
             user_id = user_result['user_id']
 
-            
-
             # person_origin_face 설정
-            user_image_dir = f'./uploaded_images/{user_id}/'
+            user_image_dir = os.path.abspath(f'./uploaded_images/{user_id}/').replace("\\", "/")
             if not os.path.exists(user_image_dir):
                 print(f"Directory not found: {user_image_dir}")
                 return
@@ -192,7 +190,7 @@ def update_person_face_from_clip(person_no):
 
             # 첫 번째 업로드된 이미지 파일 사용 (필요에 따라 선택 방법 변경 가능)
             uploaded_image_name = user_image_files[0]
-            person_face_relative_path = os.path.join(user_image_dir, uploaded_image_name)
+            person_face_relative_path = os.path.join(user_image_dir, uploaded_image_name).replace("\\", "/")
 
             # person 테이블 업데이트
             sql = """
@@ -349,7 +347,7 @@ def save_to_db(person_info, or_video_id, user_id, user_no, filter_id):
 
                 person_id = person['person_id']
                 # 이미지 파일 경로 설정
-                person_image_dir = f'./extracted_images/{user_id}/{or_video_name}_clip/person_{person_id}/'
+                person_image_dir = os.path.abspath(f'./extracted_images/{user_id}/{or_video_name}_clip/person_{person_id}/').replace("\\", "/")
                 if not os.path.exists(person_image_dir):
                     print(f"Directory not found: {person_image_dir}")
                     continue
@@ -364,7 +362,7 @@ def save_to_db(person_info, or_video_id, user_id, user_no, filter_id):
                 face_name = face_files[0]
 
                 # 상대 경로로 저장
-                face_image_relative_path = os.path.join(person_image_dir, face_name)
+                face_image_relative_path = os.path.join(person_image_dir, face_name).replace("\\", "/")
                 sql = """
                     INSERT INTO person (person_id, or_video_id, person_age, person_gender, person_color, person_clothes, person_face, person_origin_face, user_no, filter_id)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -406,7 +404,7 @@ def save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id,
 
                 person_id = person['person_id']
                 # 이미지 파일 경로 설정
-                person_image_dir = f'./extracted_images/{user_id}/{or_video_name}_clip/person_{person_id}/'
+                person_image_dir = os.path.abspath(f'./extracted_images/{user_id}/{or_video_name}_clip/person_{person_id}/').replace("\\", "/")
                 if not os.path.exists(person_image_dir):
                     print(f"Directory not found: {person_image_dir}")
                     continue
@@ -421,13 +419,13 @@ def save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id,
                 face_name = face_files[0]
 
                 # 상대 경로로 저장
-                face_image_relative_path = os.path.join(person_image_dir, face_name)
+                face_image_relative_path = os.path.join(person_image_dir, face_name).replace("\\", "/")
                 sql = """
                     INSERT INTO person (person_id, or_video_id, person_age, person_gender, person_color, person_clothes, person_face, person_origin_face, user_no, filter_id)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 # image_path 앞에 './'를 추가하고, 역슬래시를 슬래시로 변경
-                image_path = f"./{image_path}".replace("\\", "/")
+                image_path = os.path.abspath(image_path).replace("\\", "/")
                 cursor.execute(sql, (
                     person_id,
                     or_video_id,
@@ -522,20 +520,18 @@ def tracking_video_with_image(video_name, user_id, or_video_id, filter_id, saved
 # 트래킹 영상 정보 저장 (이미지 없을 때)
 def save_processed_video_info_without_image(video_name, user_id, user_no, or_video_id, filter_id):
     try:
-        extracted_dir = f'./extracted_images/{user_id}/{video_name}_clip'
+        extracted_dir = os.path.abspath(f'./extracted_images/{user_id}/{video_name}_clip').replace("\\", "/")
         if not os.path.exists(extracted_dir):
             print(f"No clip folder found for video {video_name}")
             return
         
         pro_video_name = f"{video_name}_output.mp4"
-        pro_video_path = os.path.abspath(os.path.join(extracted_dir, pro_video_name))
+        pro_video_path = os.path.abspath(os.path.join(extracted_dir, pro_video_name)).replace("\\", "/")
         
         if not os.path.exists(pro_video_path):
             print(f"No processed video file found: {pro_video_path}")
             return
         
-        # Replace backslashes with forward slashes
-        pro_video_path = pro_video_path.replace('\\', '/')
         connection = get_db_connection()
         try:
             with connection.cursor() as cursor:
@@ -568,7 +564,7 @@ def save_processed_video_info_without_image(video_name, user_id, user_no, or_vid
 # 트래킹 영상 정보 저장 (이미지 있을 때)
 def save_processed_video_info_with_image(video_name, user_id, user_no, or_video_id, filter_id):
     try:
-        extracted_dir = f'./extracted_images/{user_id}/{video_name}_clip'
+        extracted_dir = os.path.abspath(f'./extracted_images/{user_id}/{video_name}_clip').replace("\\", "/")
         if not os.path.exists(extracted_dir):
             print(f"No clip folder found for video {video_name}")
             return
@@ -578,15 +574,14 @@ def save_processed_video_info_with_image(video_name, user_id, user_no, or_video_
             with connection.cursor() as cursor:
                 person_folders = os.listdir(extracted_dir)
                 for person_id in person_folders:
-                    person_folder_path = os.path.join(extracted_dir, person_id)
+                    person_folder_path = os.path.abspath(os.path.join(extracted_dir, person_id)).replace("\\", "/")
                     
                     if os.path.isdir(person_folder_path):
                         video_files = [vf for vf in os.listdir(person_folder_path) if vf.endswith('.mp4')]
                         
                         for video_file in video_files:
                             pro_video_name = f"{video_name}_{video_file}"
-                            pro_video_path = os.path.abspath(os.path.join(person_folder_path, video_file))
-                            pro_video_path = pro_video_path.replace('\\', '/')
+                            pro_video_path = os.path.abspath(os.path.join(person_folder_path, video_file)).replace("\\", "/")
                             # 중복 체크 로직 추가
                             sql_check = """
                                 SELECT COUNT(*) as count FROM processed_video 
@@ -634,7 +629,7 @@ def process_save_face_info_without_image(video_name, user_id, or_video_id, filte
         else:
             print(f"{video_name} Save_info.py 정보 추출 성공")
             # 예시 메모장 파일 경로
-            info_file_path = f'./extracted_images/{user_id}/{video_name}_face_info.txt'
+            info_file_path = os.path.abspath(f'./extracted_images/{user_id}/{video_name}_face_info.txt').replace("\\", "/")
 
             # 파싱한 person 정보
             person_info = parse_info_file(info_file_path)
@@ -680,7 +675,7 @@ def process_save_face_info_with_image(video_name, user_id, or_video_id, filter_i
         else:
             print(f"{video_name} Save_info.py 정보 추출 성공")
             # 예시 메모장 파일 경로
-            info_file_path = f'./extracted_images/{user_id}/{video_name}_face_info.txt'
+            info_file_path = os.path.abspath(f'./extracted_images/{user_id}/{video_name}_face_info.txt').replace("\\", "/")
 
             # 파싱한 person 정보
             person_info = parse_info_file(info_file_path)
@@ -716,8 +711,7 @@ def process_video_without_images(video_name, user_id, filter_id, clip_flag=True)
         else:
             print("Main.py 얼굴정보추출 성공")
             # 얼굴정보추출 성공 후 save_face_info6.py 실행
-            video_path = os.path.join('uploaded_videos', user_id, video_name + ".mp4")  # 파일 절대 경로로 변경
-            video_path = video_path.replace("\\", "/")
+            video_path = os.path.abspath(os.path.join('uploaded_videos', user_id, video_name + ".mp4")).replace("\\", "/")
             or_video_id = get_or_video_id_by_path(video_path)
             if or_video_id is not None:
                 process_save_face_info_without_image(video_name, user_id, or_video_id, filter_id, clip_flag)
@@ -740,8 +734,7 @@ def process_video_with_images(video_name, user_id, filter_id, image_path, clip_f
         else:
             print("Main.py 얼굴정보추출 성공")
             # 얼굴정보추출 성공 후 save_face_info6.py 실행
-            video_path = os.path.join('uploaded_videos', user_id, video_name + ".mp4")  # 파일 절대 경로로 변경
-            video_path = video_path.replace("\\", "/")
+            video_path = os.path.abspath(os.path.join('uploaded_videos', user_id, video_name + ".mp4")).replace("\\", "/")
             or_video_id = get_or_video_id_by_path(video_path)
             if or_video_id is not None:
                 process_save_face_info_with_image(video_name, user_id, or_video_id, filter_id, image_path, clip_flag)
@@ -784,8 +777,8 @@ def upload_image(webcam_id):
     
     videoname = f"{user_id}_realtime"
     filename = f"{timestamp}_{videoname}.jpg"
-    folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id])
-    filepath = os.path.join(folder_path, filename)
+    folder_path = os.path.abspath(os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id])).replace("\\", "/")
+    filepath = os.path.abspath(os.path.join(folder_path, filename)).replace("\\", "/")
     cv2.imwrite(filepath, img)
     
     print(f"Received and saved image from webcam {webcam_id} with shape: {img.shape} as {filename}")
@@ -837,14 +830,14 @@ def get_Person_to_clip():
         # 경로에 비디오 파일이 존재하는지 확인
         if not does_video_file_exist(user_id, video_name, person_id):
             # 비디오 파일이 없을 경우, 해당 디렉토리에서 이미지 파일을 찾아 트래킹 비디오 생성
-            image_dir = f'./extracted_images/{user_id}/{video_name}_clip/person_{person_id}/'
+            image_dir = os.path.abspath(f'./extracted_images/{user_id}/{video_name}_clip/person_{person_id}/').replace("\\", "/")
             image_files = [f for f in os.listdir(image_dir) if f.endswith('.jpg') or f.endswith('.png')]
             if not image_files:
                 return jsonify({"error": "No image files found to create tracking video"}), 404
 
             filter_id = get_filter_id_by_person_no(person_no)
             # 첫 번째 이미지를 사용하여 트래킹 비디오 생성 (필요에 따라 다른 선택 방법 사용 가능)
-            image_path = os.path.join(image_dir, image_files[0])
+            image_path = os.path.abspath(os.path.join(image_dir, image_files[0])).replace("\\", "/")
             tracking_video_with_image(video_name, user_id, or_video_id, filter_id, image_path)
             return jsonify({"message": "Tracking video created using available images"}), 200
         
@@ -996,8 +989,8 @@ def upload_file():
 
         clip_flag = request.form.get('clip_flag', 'true').lower() != 'false'
 
-        user_video_path = os.path.join(VIDEO_SAVE_PATH, str(user_id))
-        user_image_path = os.path.join(IMAGE_SAVE_PATH, str(user_id))
+        user_video_path = os.path.abspath(os.path.join(VIDEO_SAVE_PATH, str(user_id))).replace("\\", "/")
+        user_image_path = os.path.abspath(os.path.join(IMAGE_SAVE_PATH, str(user_id))).replace("\\", "/")
         os.makedirs(user_video_path, exist_ok=True)
         os.makedirs(user_image_path, exist_ok=True)
 
@@ -1023,8 +1016,7 @@ def upload_file():
 
                 if video_name and video_content_base64:
                     video_content = base64.b64decode(video_content_base64)
-                    video_path = os.path.join(user_video_path, video_name)
-                    video_path = video_path.replace("\\", "/")
+                    video_path = os.path.abspath(os.path.join(user_video_path, video_name)).replace("\\", "/")
                     with open(video_path, 'wb') as video_file:
                         video_file.write(video_content)
 
@@ -1059,7 +1051,7 @@ def upload_file():
             image_path = None
             if image_name and image_content_base64:
                 image_content = base64.b64decode(image_content_base64)
-                image_path = os.path.join(user_image_path, image_name)
+                image_path = os.path.abspath(os.path.join(user_image_path, image_name)).replace("\\", "/")
 
                 with open(image_path, 'wb') as image_file:
                     image_file.write(image_content)
@@ -1279,7 +1271,7 @@ def upload_map():
 
             if user_id and map_latitude is not None and map_longitude is not None and address:
                 # user_id를 이용하여 user_no 조회
-                cursor.execute("SELECT user_no FROM user WHERE user_id = %s", (user_id))
+                cursor.execute("SELECT user_no FROM user WHERE user_id = %s", (user_id,))
                 result = cursor.fetchone()
 
                 if not result:
