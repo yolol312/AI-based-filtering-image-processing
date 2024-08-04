@@ -1,0 +1,42 @@
+/* SidebarLeft.css */
+.SidebarLeft {
+  width: 20%; /* Sidebar의 폭을 넓혀 더 많은 공간을 제공 */
+  border-top: 1px solid black;
+  border-right: 1px solid black;
+  padding: 20px; /* 내부 패딩을 늘려 여백 추가 */
+  overflow-y: auto;
+  background-color: #f5f5f5;
+  font-family: Arial, sans-serif;
+}
+
+.SidebarLefttitle {
+  font-size: 22px; /* 제목 글꼴 크기 증가 */
+  font-weight: bold;
+  margin-bottom: 20px;
+  color: #333;
+  text-align: center;
+}
+
+.video-button {
+  display: block;
+  width: 100%; /* 버튼이 사이드바 전체 폭을 차지하도록 설정 */
+  padding: 10px;
+  font-size: 16px;
+  font-weight: bold;
+  color: #fff;
+  background-color: #007bff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  margin-bottom: 20px; /* 버튼 간의 간격 */
+  text-align: left; /* 텍스트 왼쪽 정렬 */
+}
+
+.video-button:hover {
+  background-color: #007bff;
+}
+
+.video-button.selected {
+  background-color: #007bff;
+}

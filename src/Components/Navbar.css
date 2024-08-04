@@ -1,0 +1,28 @@
+/* Navbar.css */
+
+.Navbar {
+  background-color: gray;
+  padding: 20px 0;
+  text-align: right;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  border-bottom: 1px solid black;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end; /* 요소들을 오른쪽 끝에 정렬 */
+}
+
+.NavbarUser {
+  margin-left: 8px; /* 사용자 이름을 "파일업로드" 링크 옆에 배치 */
+  margin-right: 8px;
+  font-size: 16px;
+  color: white; /* 사용자 이름도 흰색으로 표시 */
+}
+
+.NavbarMenu {
+  color: white;
+  margin: 8px;
+  text-decoration: none;
+}

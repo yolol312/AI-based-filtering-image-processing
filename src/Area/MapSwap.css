@@ -1,0 +1,30 @@
+/* MapSwap.css */
+
+.MapSwap {
+    padding: 20px;
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    width: 100%;
+    overflow-y: auto;
+  }
+  
+  .title {
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 15px;
+  }
+  
+  .map-info {
+    line-height: 1.6;
+  }
+  
+  .map-info p {
+    margin: 0;
+    padding: 5px 0;
+  }
+  
+  .map-info p:first-child {
+    font-weight: bold;
+  }
+  

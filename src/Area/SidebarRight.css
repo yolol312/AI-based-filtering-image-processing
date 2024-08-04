@@ -1,0 +1,52 @@
+/* SidebarRight.css */
+.SidebarRight {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+  border-left: 1px solid black;
+  width: 20%;
+}
+
+.SidebarRighttitle {
+  font-size: 22px; /* 제목 글꼴 크기 증가 */
+  font-weight: bold;
+  margin-bottom: 20px;
+  color: #333;
+  text-align: center;
+}
+
+.card {
+  border: 2px solid black;
+  padding: 10px;
+  width: 250px;
+  text-align: center;
+}
+
+.video-name {
+  font-weight: bold;
+  margin-bottom: 10px;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.person-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.person-table td {
+  border: 1px solid black;
+  padding: 5px;
+}
+
+.person-table button {
+  width: 100%;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+}
