@@ -9,6 +9,7 @@ import re
 import numpy as np
 import cv2
 from datetime import datetime
+from filelock import FileLock
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -513,9 +514,6 @@ def tracking_video_with_image_callback(video_name, user_id, or_video_id, filter_
             print(f"Error occurred: {stderr.decode('utf-8')}")
         else:
             print(f"{video_name} 트래킹 영상 추출 성공")
-            user_no = get_user_no(user_id)
-            if user_no is not None:
-                save_processed_video_info_with_image(video_name, user_id, user_no, or_video_id, filter_id)
             if callback:
                 callback()
     except Exception as e:
@@ -646,6 +644,13 @@ def process_save_face_info_without_image(video_name, user_id, or_video_id, filte
         else:
             print(f"No filter found for filter_id: {filter_id}")
             return
+        
+        # 'None' 값을 'none' 문자열로 변환
+        filter_gender = 'none' if filter_gender is None else filter_gender
+        filter_age = 'none' if filter_age is None else filter_age
+        filter_color = 'none' if filter_color is None else filter_color
+        filter_clothes = 'none' if filter_clothes is None else filter_clothes
+
         # save_face_info6.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
             ["python", "Save_info.py", video_name, str(user_id), filter_gender, filter_age, filter_color, filter_clothes], 
@@ -692,6 +697,13 @@ def process_save_face_info_with_image(video_name, user_id, or_video_id, filter_i
         else:
             print(f"No filter found for filter_id: {filter_id}")
             return
+        
+        # 'None' 값을 'none' 문자열로 변환
+        filter_gender = 'none' if filter_gender is None else filter_gender
+        filter_age = 'none' if filter_age is None else filter_age
+        filter_color = 'none' if filter_color is None else filter_color
+        filter_clothes = 'none' if filter_clothes is None else filter_clothes
+
         # save_face_info6.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
             ["python", "Save_info_with_image.py", video_name, str(user_id), filter_gender, filter_age, filter_color, filter_clothes, image_path], 
@@ -724,6 +736,7 @@ def process_save_face_info_with_image(video_name, user_id, or_video_id, filter_i
 
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
+
 
 # 비디오 처리 함수 (이미지 없을 때)
 def process_video_without_images(video_name, user_id, filter_id, clip_flag=True):
@@ -857,27 +870,26 @@ def get_Person_to_clip():
         video_name = get_or_video_name(or_video_id)
 
         # 경로에 비디오 파일이 존재하는지 확인
-        if not does_video_file_exist(user_id, video_name, person_id):
-            # 비디오 파일이 없을 경우, 해당 디렉토리에서 이미지 파일을 찾아 트래킹 비디오 생성
-            image_dir = f'./extracted_images/{user_id}/{video_name}_clip/person_{person_id}/'
-            image_files = [f for f in os.listdir(image_dir) if f.endswith('.jpg') or f.endswith('.png')]
-            if not image_files:
-                return jsonify({"error": "No image files found to create tracking video"}), 404
+        lock_file_path = f'/tmp/{user_id}_{video_name}_{person_id}.lock'
+        with FileLock(lock_file_path):
+            if not does_video_file_exist(user_id, video_name, person_id):
+                # 비디오 파일이 없을 경우, 해당 디렉토리에서 이미지 파일을 찾아 트래킹 비디오 생성
+                image_dir = f'./extracted_images/{user_id}/{video_name}_clip/person_{person_id}/'
+                image_files = [f for f in os.listdir(image_dir) if f.endswith('.jpg') or f.endswith('.png')]
+                if not image_files:
+                    return jsonify({"error": "No image files found to create tracking video"}), 404
 
-            filter_id = get_filter_id_by_person_no(person_no)
-            # 첫 번째 이미지를 사용하여 트래킹 비디오 생성 (필요에 따라 다른 선택 방법 사용 가능)
-            image_path = os.path.join(image_dir, image_files[0]).replace("\\", "/")
-            
-            def tracking_callback():
-                clip_video(video_name, user_id, or_video_id)
-            
-            # 비동기로 트래킹 비디오 생성 후 콜백으로 클립 비디오 생성 호출
-            threading.Thread(target=tracking_video_with_image_callback, args=(video_name, user_id, or_video_id, filter_id, [image_path], tracking_callback)).start()
-            
-            return jsonify({"message": "Tracking video is being created using available images"}), 200
-
-        # 클립 생성 메서드 (해당 person_id 의 디렉토리에 그 person_id 가 트래킹 된 영상이 존재해야함)
-        clip_video(video_name, user_id, or_video_id)
+                filter_id = get_filter_id_by_person_no(person_no)
+                # 첫 번째 이미지를 사용하여 트래킹 비디오 생성 (필요에 따라 다른 선택 방법 사용 가능)
+                image_path = os.path.join(image_dir, image_files[0]).replace("\\", "/")
+                
+                def tracking_callback():
+                    clip_video(video_name, user_id, or_video_id)
+                
+                # 비동기로 트래킹 비디오 생성 후 콜백으로 클립 비디오 생성 호출
+                threading.Thread(target=tracking_video_with_image_callback, args=(video_name, user_id, or_video_id, filter_id, [image_path], tracking_callback)).start()
+                
+                return jsonify({"message": "Tracking video is being created using available images"}), 200
         
         # person_no를 기반으로 클립 정보 가져오기
         clip_sql = """
@@ -897,6 +909,8 @@ def get_Person_to_clip():
     finally:
         cursor.close()
         connection.close()
+
+     
 
 # ffmpeg를 사용하여 비디오를 H.264 코덱으로 재인코딩.
 def reencode_video(input_path, output_path):
@@ -1531,7 +1545,7 @@ def upload_pro_person():
 
         provideo_person_dict = [dict(row) for row in provideo_person_result] if provideo_person_result else []
 
-        return jsonify({"provideo_person_dict": provideo_person_dict}), 200
+        return jsonify({"provideo_person_info": provideo_person_dict}), 200
 
     except Exception as e:
         print(f"Exception: {str(e)}")
