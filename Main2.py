@@ -7,6 +7,7 @@ from datetime import datetime
 from facenet_pytorch import MTCNN, InceptionResnetV1
 from ultralytics import YOLO
 from age_model import ResNetAgeModel, device, test_transform
+from gender_model import ResNetGenderModel, device , test_transform
 from PIL import Image
 from collections import Counter
 
@@ -144,12 +145,21 @@ class FaceRecognizer:
 
 
 def predict_gender(face_image, gender_model):
-    face_rgb = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
-    results = gender_model.predict(source=[face_rgb], save=False)
-    genders = {0: "Male", 1: "Female"}
-    gender_id = results[0].boxes.data[0][5].item()
-    return genders.get(gender_id, "Unknown")
+    if isinstance(face_image, np.ndarray):
+        face_image = Image.fromarray(face_image)
 
+    face_tensor = test_transform(face_image).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        logit = gender_model(face_tensor)
+        pred = logit.argmax(dim=1, keepdim=True).cpu().numpy()
+
+    gender_dict = {0: "Male", 1: "Female"}
+    if pred[0][0] < len(gender_dict):
+        return gender_dict[pred[0][0]]
+    else:
+        return "Unknown"
+    
 def predict_age(face_image, age_model):
     if isinstance(face_image, np.ndarray):
         face_image = Image.fromarray(face_image)
@@ -218,11 +228,18 @@ def process_video(video_path, output_dir, yolo_model_path, gender_model_path, ag
     frame_interval = 2 # 8프레임마다 처리
 
     yolo_model = YOLO(yolo_model_path)
-    gender_model = YOLO(gender_model_path)
+    # gender_model = YOLO(gender_model_path)
+
+    gender_model = ResNetGenderModel(num_classes=2)
+    gender_model.load_state_dict(torch.load(gender_model_path))
+    gender_model = gender_model.to(device)
+    gender_model.eval()
+
     age_model = ResNetAgeModel(num_classes=4)
     age_model.load_state_dict(torch.load(age_model_path))
     age_model = age_model.to(device)
     age_model.eval()
+
     color_model = YOLO(color_model_path)
     clothes_model = YOLO(clothes_model_path) 
 
@@ -254,7 +271,7 @@ def process_videos(video_paths, output_dir, yolo_model_path, gender_model_path, 
 
 if __name__ == "__main__":
     try:
-        user_no = sys.argv[2]
+        user_no = "test5"
         video_directory = f"./uploaded_videos/{user_no}/"
         video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.endswith(('.mp4', '.avi', '.mov'))]
         output_directory = f"./extracted_images/{user_no}/"
