@@ -124,7 +124,9 @@ if __name__ == "__main__":
         user_id = sys.argv[2]
         filter_gender = sys.argv[3].lower()
         filter_age = sys.argv[4].lower()
-        reference_image_path = sys.argv[5]
+        filter_color = sys.argv[5].lower()
+        filter_clothes = sys.argv[6].lower()
+        reference_image_path = sys.argv[7]
 
         if filter_gender == '여성':
             filter_gender = 'female'

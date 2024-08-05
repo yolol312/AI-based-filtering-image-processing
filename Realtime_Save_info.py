@@ -17,7 +17,7 @@ def parse_filename(filename):
         return person_id, frame, gender, age, color, clothes
     return None
 
-def gather_info_from_files(directory, filter_gender, filter_age, filter_color, filter_clothes):
+def gather_info_from_files(directory):
     info_dict = {}
     image_files = []
 
@@ -26,19 +26,14 @@ def gather_info_from_files(directory, filter_gender, filter_age, filter_color, f
             parsed_info = parse_filename(file)
             if parsed_info:
                 person_id, frame, gender, age, color, clothes = parsed_info
-
-                # 필터 조건을 만족하는 경우에만 처리
-                if (filter_gender == 'any' or filter_gender == gender) and \
-                   (filter_age == 'any' or filter_age == age) and \
-                   (filter_color == 'any' or filter_color == color) and \
-                   (filter_clothes == 'any' or filter_clothes == clothes):
-                    if person_id not in info_dict:
-                        info_dict[person_id] = []
-                    info_dict[person_id].append((frame, gender, age, color, clothes))
-                    image_files.append((person_id, os.path.join(directory, file)))
+                
+                if person_id not in info_dict:
+                    info_dict[person_id] = []
+                info_dict[person_id].append((frame, gender, age, color, clothes))
+                image_files.append((person_id, os.path.join(directory, file)))
 
     for person_id in info_dict:
-        info_dict[person_id].sort()  # 프레임을 낮은 순으로 정렬
+        info_dict[person_id].sort()
     
     return info_dict, image_files
 
@@ -47,7 +42,7 @@ def get_most_common(values):
     most_common = counter.most_common(1)
     return most_common[0][0] if most_common else None
 
-def save_info_to_txt(info_dict, output_file):
+def save_info_to_txt(info_dict, output_file, filter_gender, filter_age, filter_color, filter_clothes):
     filtered_persons = []
     with open(output_file, 'w') as f:
         for person_id in sorted(info_dict.keys()):
@@ -136,25 +131,30 @@ def save_best_faces(image_files, output_folder, info_dict, filtered_persons):
 
 if __name__ == "__main__":
     try:
-        video_name = "testVideo2"  # video_name 인수를 추가로 받음
-        user_id = "2025"
+        video_name = "realtime"
+        user_id = "test"
         filter_gender = "female"
         filter_age = "youth"
-        filter_color = "white"
+        filter_color = "green"
         filter_clothes = "shortsleevetop"
 
-        output_directory = f"./extracted_images/{user_id}/"
-        os.makedirs(output_directory, exist_ok=True)  # 디렉토리를 미리 생성합니다.
+        if filter_gender == '여성':
+            filter_gender = 'female'
+        elif filter_gender == '남성':
+            filter_gender = 'male'
+
+        output_directory = f"./realtime_extracted_images/{user_id}/"
+        os.makedirs(output_directory, exist_ok=True)
 
         for video_folder in os.listdir(output_directory):
             if '_face' in video_folder:
                 folder_path = os.path.join(output_directory, video_folder)
                 if os.path.isdir(folder_path):
                     try:
-                        info_dict, image_files = gather_info_from_files(folder_path, filter_gender, filter_age, filter_color, filter_clothes)
+                        info_dict, image_files = gather_info_from_files(folder_path)
 
                         output_file = os.path.join(output_directory, f"{video_folder}_info.txt")
-                        filtered_persons = save_info_to_txt(info_dict, output_file)
+                        filtered_persons = save_info_to_txt(info_dict, output_file, filter_gender, filter_age, filter_color, filter_clothes)
                         print(f"Information saved to {output_file}")
 
                         clip_folder = folder_path.replace('_face', '_clip')
