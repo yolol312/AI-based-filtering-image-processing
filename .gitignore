@@ -2,6 +2,22 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=windows,python,visualstudiocode,react
 
 ### Python ###
+
+# Ignore extracted_images directory
+extracted_images/
+
+# Ignore models directory
+models/
+
+# Ignore uploaded_videos directory
+uploaded_videos/
+
+# Ignore all .txt files in extracted_images/test/testVideo1_face
+#extracted_images/test/testVideo1_face/*.txt
+
+# If you want to specifically ignore test/testVideo1_face_info.txt
+# extracted_images/test/testVideo1_face/testVideo1_face_info.txt
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

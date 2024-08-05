@@ -122,6 +122,7 @@ def get_image_paths_for_person_nos(person_nos):
     image_paths = []
     try:
         with connection.cursor() as cursor:
+            
             sql = """
                 SELECT person_no, person_origin_face
                 FROM person

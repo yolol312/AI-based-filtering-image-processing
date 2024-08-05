@@ -254,15 +254,15 @@ def process_videos(video_paths, output_dir, yolo_model_path, gender_model_path, 
 
 if __name__ == "__main__":
     try:
-        user_no = "2025"
+        user_no = "test"
         video_directory = f"./uploaded_videos/{user_no}/"
         video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.endswith(('.mp4', '.avi', '.mov'))]
         output_directory = f"./extracted_images/{user_no}/"
         yolo_model_path = './models/yolov8x.pt'
         gender_model_path = './models/gender_model.pt'
-        age_model_path = './models/age_best.pth'
+        age_model_path = './models/age_model.pth'
         color_model_path = './models/color_model.pt'
-        clothes_model_path = './models/clothes_class.pt'
+        clothes_model_path = './models/clothes_model.pt'
         
         process_videos(video_paths, output_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path)
         

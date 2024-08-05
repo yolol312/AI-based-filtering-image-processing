@@ -1,0 +1,17 @@
+opencv-python-headless
+torch
+torchvision
+numpy
+facenet-pytorch
+ultralytics
+Pillow
+cmake==3.25.2
+dlib==19.24.2
+pymysql
+https://download.pytorch.org/whl/cu121/torch-2.2.2%2Bcu121-cp310-cp310-win_amd64.whl#sha256=d300055aac0e2063f9a2659924e9766605db06d5683532c6eabbdef6bec865dd
+https://download.pytorch.org/whl/cu121/torchvision-0.17.2%2Bcu121-cp310-cp310-win_amd64.whl#sha256=c780783d4113cf3f86297f1b51a0f3a5c1f9487c5ec690b9a470d7d6e4f67e62
+deep_sort_realtime
+flask
+flask_cors
+flask_socketio
+face_recognition
