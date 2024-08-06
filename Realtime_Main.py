@@ -223,8 +223,6 @@ def process_images(image_paths, output_image_directory, yolo_model_path, gender_
     num_images = len(image_paths) - (len(image_paths) % 24)
     image_paths = image_paths[:num_images]
 
-    create_video(image_paths, output_video_directory, fps)
-
     frame_number = 1
     for i in range(0, len(image_paths), 4):
         image_path = image_paths[i]
@@ -236,7 +234,7 @@ def process_images(image_paths, output_image_directory, yolo_model_path, gender_
 
 if __name__ == "__main__":
     try:
-        user_no = "test"
+        user_no = sys.argv[1]
         image_directory = f"./saved_images/{user_no}/"
         image_paths = [os.path.join(image_directory, file) for file in os.listdir(image_directory) if file.endswith(('.jpg', '.jpeg', '.png'))]
         output_image_directory = f"./realtime_extracted_images/{user_no}/"

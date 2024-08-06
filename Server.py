@@ -10,6 +10,7 @@ import numpy as np
 import cv2
 from datetime import datetime
 from filelock import FileLock
+import time
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -27,8 +28,11 @@ def get_db_connection():
     )
 
 # 각 웹캠의 이미지가 저장될 폴더 경로 설정
-SAVE_FOLDER = 'saved_images'
+SAVE_FOLDER = 'realtime_saved_images'
+REALTIME_IMAGE_SAVE_PATH = 'realtime_uploaded_images'
 WEBCAM_FOLDERS = [f"webcam_{i}" for i in range(4)]
+
+realtime_flag = True #실시간 분석 ON/OFF
 
 # 폴더가 없으면 생성
 for folder in WEBCAM_FOLDERS:
@@ -478,7 +482,6 @@ def clip_video(video_name, user_id, or_video_id):
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-
 # 트래킹 처리 함수 (이미지 없을 때)
 def tracking_video_without_image(video_name, user_id, or_video_id, filter_id, saved_paths):
     try:
@@ -521,7 +524,6 @@ def tracking_video_with_image_callback(video_name, user_id, or_video_id, filter_
         print(f"An unexpected error occurred: {str(e)}")
         if callback:
             callback()
-
 
 # 트래킹 처리 함수 (이미지 있을 때)
 def tracking_video_with_image(video_name, user_id, or_video_id, filter_id, saved_paths):
@@ -685,6 +687,83 @@ def process_save_face_info_without_image(video_name, user_id, or_video_id, filte
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
+## 실시간 얼굴 처리 함수 (이미지 없을 때)
+def realtime_process_save_face_info_without_image(video_name, user_id, filter_id, start_time):
+    try:
+        # filter 정보 가져오기
+        filter_info = get_filter_info(filter_id)
+        if filter_info:
+            filter_gender = filter_info['filter_gender']
+            filter_age = filter_info['filter_age']
+            filter_color = filter_info['filter_color']
+            filter_clothes = filter_info['filter_clothes']
+        else:
+            print(f"No filter found for filter_id: {filter_id}")
+            return
+        
+        # 'None' 값을 'none' 문자열로 변환
+        filter_gender = 'none' if filter_gender is None else filter_gender
+        filter_age = 'none' if filter_age is None else filter_age
+        filter_color = 'none' if filter_color is None else filter_color
+        filter_clothes = 'none' if filter_clothes is None else filter_clothes
+
+        # save_face_info6.py 스크립트 호출 (백그라운드 실행)
+        process = subprocess.Popen(
+            ["python", "Realtime_Save_info.py", str(user_id), filter_gender, filter_age, filter_color, filter_clothes], 
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        stdout, stderr = process.communicate()
+
+        if process.returncode != 0:
+            print(f"Error occurred: {stderr.decode('utf-8')}")
+        else:
+            #DB에 원본 저장 코드 필요
+            connection = get_db_connection()
+            filter_id = None
+
+            video_path = os.path.join('realtime_extracted_videos', user_id, "realtime.mp4") #Realtime_Main.py 끝나고, 이미지들을 동영상으로 저장한 디렉토리
+
+            with connection.cursor() as cursor:
+                # origin_video에 데이터 삽입
+                sql = """
+                    INSERT INTO origin_video (or_video_name, or_video_content, start_time, cam_num)
+                    VALUES (%s, %s, %s, %s)
+                """
+                cursor.execute(sql, (video_name, video_path, start_time, cam_num)) #filter_id랑 Cam_num도 같이 콜백을 받아야 할 듯
+
+                connection.commit()
+                connection.close()
+
+                response = jsonify({"status": "success", "message": "Data received and processed successfully"})
+                response.status_code = 200
+
+            or_video_id, or_video_name = get_or_video_id_by_path(video_path)
+
+            print(f"{or_video_name} Save_info.py 정보 추출 성공")
+            # 예시 메모장 파일 경로
+            info_file_path = f'./extracted_images/{user_id}/{or_video_name}_face_info.txt'
+
+            # 파싱한 person 정보
+            person_info = parse_info_file(info_file_path)
+
+            # DB에 저장
+            user_no = get_user_no(user_id)
+            if user_no is not None:
+                # 이미지 파일 경로 설정
+                saved_paths = save_to_db(person_info, or_video_id, user_id, user_no, filter_id)
+                print("person DB 저장")
+                print("Saved image paths:", saved_paths)
+            
+            tracking_video_without_image(or_video_name, user_id, or_video_id, filter_id, saved_paths)
+            print("pro_video db 저장")
+            #if clip_flag:
+                #clip_video(video_name, user_id, or_video_id)
+
+            return response
+
+    except Exception as e:
+        print(f"An unexpected error occurred: {str(e)}")
+
 # 얼굴 처리 함수 (이미지 있을 때)
 def process_save_face_info_with_image(video_name, user_id, or_video_id, filter_id, image_path, clip_flag=True):
     try:
@@ -738,6 +817,27 @@ def process_save_face_info_with_image(video_name, user_id, or_video_id, filter_i
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
+## 실시간 이미지 처리 함수 (필터링 이미지 없을 때)
+def realtime_process_video_without_images(video_name, user_id, filter_id, start_time):
+    try:
+        global realtime_flag
+        while(realtime_flag):
+            # Main_image2.py 스크립트 호출 (백그라운드 실행)
+            process = subprocess.Popen(
+                ["python", "Realtime_Main.py", video_name, str(user_id)], 
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            stdout, stderr = process.communicate()
+            time.sleep(1)  # 1초 지연
+
+        if process.returncode != 0:
+            print(f"Error occurred: {stderr.decode('utf-8')}")
+        else:
+            print("Realtime_Main.py 얼굴정보추출 성공")
+            realtime_process_save_face_info_without_image(video_name, user_id, filter_id, start_time)
+
+    except Exception as e:
+        print(f"An unexpected error occurred: {str(e)}")
 
 # 비디오 처리 함수 (이미지 없을 때)
 def process_video_without_images(video_name, user_id, filter_id, clip_flag=True):
@@ -785,9 +885,77 @@ def process_video_with_images(video_name, user_id, filter_id, image_path, clip_f
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-# 0. 실시간 웹캠 이미지 전송(Post)
-@app.route('/upload_image_<int:webcam_id>', methods=['POST'])
-def upload_image(webcam_id):
+## 0. 실시간 파일 업로드 엔드포인트(Post)
+@app.route('/realtime_upload_file', methods=['POST'])
+def realtime_upload_file():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"status": "error", "message": "No JSON data received"}), 400
+        if isinstance(data, str):
+            return jsonify({"status": "error", "message": "Invalid JSON data format"}), 400
+
+        user_data = data.get('user_data', {})
+        user_id = user_data.get('user_id', '')
+
+        filter_data = data.get('filter_data', {})
+        age = filter_data.get('age', '')
+        gender = filter_data.get('gender', '')
+        color = filter_data.get('color', '')
+        type = filter_data.get('type', '')
+
+        clip_flag = request.form.get('clip_flag', 'true').lower() != 'false'
+
+        user_image_path = os.path.join(REALTIME_IMAGE_SAVE_PATH, str(user_id))
+        os.makedirs(user_image_path, exist_ok=True)
+
+        connection = get_db_connection()
+        filter_id = None
+        with connection.cursor() as cursor:
+            filter_sql = """
+                INSERT INTO filter (filter_gender, filter_age, filter_color, filter_clothes)
+                VALUES (%s, %s, %s, %s)
+            """
+            cursor.execute(filter_sql, (gender, age, color, type))
+            filter_id = cursor.lastrowid
+            print("filter DB create")
+            print(f"filter ID : {filter_id}") #filter_id를 클라이언트에게 콜백으로 돌려줘야 함
+            
+            image_data = data.get('image_data', {})
+            image_name = image_data.get('image_name', '')
+            image_content_base64 = image_data.get('image_content', '')
+
+            image_path = None
+            if image_name and image_content_base64:
+                image_content = base64.b64decode(image_content_base64)
+                image_path = os.path.join(user_image_path, image_name).replace("\\", "/")
+
+                with open(image_path, 'wb') as image_file:
+                    image_file.write(image_content)
+                print(f"Image: {image_name}")
+                print(f"Image: {image_path}")
+
+            connection.commit()
+            connection.close()
+
+            response = jsonify({"status": "success", "message": "Data received and processed successfully"})
+            response.status_code = 200
+
+            return response
+
+    except ValueError as e:
+        print(f"A ValueError occurred: {str(e)}")
+        return jsonify({"status": "error", "message": f"A ValueError occurred: {str(e)}"}), 400
+    except KeyError as e:
+        print(f"A KeyError occurred: {str(e)}")
+        return jsonify({"status": "error", "message": f"A KeyError occurred: {str(e)}"}), 400
+    except Exception as e:
+        print(f"An unexpected error occurred: {str(e)}")
+        return jsonify({"status": "error", "message": f"An unexpected error occurred: {str(e)}"}), 500
+
+## 0-1. 실시간 웹캠 이미지 전송(Post)
+@app.route('/realtime_upload_image_start_<int:webcam_id>', methods=['POST'])
+def realtime_upload_image_start(webcam_id):
 
     data = request.get_json()
     # JSON 데이터가 제대로 수신되지 않았을 경우 확인
@@ -816,15 +984,49 @@ def upload_image(webcam_id):
     
 
     # 이미지 파일 저장
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    starttime = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     
-    videoname = f"{user_id}_realtime"
-    filename = f"{timestamp}_{videoname}.jpg"
+    videoname = "realtime"
+    filename = f"{starttime}_{user_id}_realtime.jpg"
     folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id])
     filepath = os.path.join(folder_path, filename).replace("\\", "/")
     cv2.imwrite(filepath, img)
+
+    #실시간 분석 시작
+    global realtime_flag
+    realtime_flag = True
+
+    # 실시간 분석 처리 함수 (최근에 업로드한 filter_id를 토큰 형태로 가지고 있어야 함)
+    realtime_process_video_without_images(videoname, user_id, filter_id, starttime)
     
     print(f"Received and saved image from webcam {webcam_id} with shape: {img.shape} as {filename}")
+    
+    return jsonify({"message": "Image received and saved"}), 200
+
+## 0-2. 실시간 웹캠 이미지 전송 종료(Post)
+@app.route('/realtime_upload_image_end_<int:webcam_id>', methods=['POST'])
+def realtime_upload_image_end(webcam_id):
+
+    data = request.get_json()
+    # JSON 데이터가 제대로 수신되지 않았을 경우 확인
+    if not data:
+        return jsonify({"status": "error", "message": "No JSON data received"}), 400
+    
+    # 수신된 데이터가 문자열이 아닌 JSON 객체인지 확인
+    if isinstance(data, str):
+        return jsonify({"status": "error", "message": "Invalid JSON data format"}), 400
+    
+    user_data = data.get('user_data', {})
+    user_id = user_data.get('user_id', '')
+    
+    if webcam_id < 0 or webcam_id >= len(WEBCAM_FOLDERS):
+        return jsonify({"error": "Invalid webcam ID"}), 400
+    
+    #실시간 분석 종료
+    global realtime_flag
+    realtime_flag = False
+    
+    print(f"Received and saved image from webcam {webcam_id} End")
     
     return jsonify({"message": "Image received and saved"}), 200
 
@@ -910,8 +1112,6 @@ def get_Person_to_clip():
     finally:
         cursor.close()
         connection.close()
-
-     
 
 # ffmpeg를 사용하여 비디오를 H.264 코덱으로 재인코딩.
 def reencode_video(input_path, output_path):
@@ -1041,6 +1241,7 @@ def stream_clipvideo():
     rv = Response(generate_range(), 206, mimetype='video/mp4')
     rv.headers.add('Content-Range', f'bytes {byte1}-{byte1 + length - 1}/{size}')
     return rv
+
 # 1. 파일 업로드 엔드포인트(Post)
 @app.route('/upload_file', methods=['POST'])
 def upload_file():
@@ -1323,7 +1524,7 @@ def login():
     else:
         return jsonify({"error": "No data received or invalid format"}), 400
     
-# 4.지도 주소 엔드포인트(Post)
+## 4.지도 주소 엔드포인트(Post)
 @app.route('/upload_maps', methods=['POST'])
 def upload_map():
     try:
@@ -1361,6 +1562,8 @@ def upload_map():
                 """
                 cursor.execute(sql, (address, map_latitude, map_longitude, user_no))
                 print(f"Inserted: {address}, {map_latitude}, {map_longitude}, {user_no}")
+                map_num = cursor.lastrowid
+                print(f"map_num : {map_num}") #map_num을 클라이언트에게 콜백으로 돌려줘야 함
 
                 connection.commit()
                 print("Transaction committed")
@@ -1385,7 +1588,7 @@ def upload_map():
         print(f"An error occurred: {str(e)}")
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-# 5.지도 마커 위치 엔드포인트(Post)
+## 5.지도 마커 위치 엔드포인트(Post)
 @app.route('/upload_cams', methods=['POST'])
 def upload_cameras():
     try:
@@ -1432,6 +1635,8 @@ def upload_cameras():
                     """
                     cursor.execute(sql, (cam_name, map_num, cam_latitude, cam_longitude))
                     print(f"Inserted: {cam_name}, {map_num}, {cam_latitude}, {cam_longitude}")
+                    cam_num = cursor.lastrowid
+                    print(f"cam_num : {cam_num}") #cam_num을 클라이언트에게 콜백으로 돌려줘야 함
                 else:
                     print("Invalid camera data:", camera)
                     return jsonify({"error": "Invalid camera data format received"}), 400
