@@ -131,12 +131,13 @@ def save_best_faces(image_files, output_folder, info_dict, filtered_persons):
 
 if __name__ == "__main__":
     try:
-        video_name = "testVideo1" # video_name 인수를 추가로 받음
-        user_id = "test"
-        filter_gender = "male"
-        filter_age = "youth"
-        filter_color = "black"
-        filter_clothes = "none"
+        video_name = sys.argv[1]
+        user_id = sys.argv[2]
+        filter_id = sys.argv[3]
+        filter_gender = sys.argv[4].lower()
+        filter_age = sys.argv[5].lower()
+        filter_color = sys.argv[6].lower()
+        filter_clothes = sys.argv[7].lower()
 
         if filter_gender == '여성':
             filter_gender = 'female'
@@ -149,24 +150,27 @@ if __name__ == "__main__":
         filter_color = None if filter_color == 'none' else filter_color
         filter_clothes = None if filter_clothes == 'none' else filter_clothes
 
-        output_directory = f"./extracted_images/{user_id}/"
-        os.makedirs(output_directory, exist_ok=True)  # 디렉토리를 미리 생성합니다.
+        output_directory = f"./extracted_images/{user_id}/filter_{filter_id}/"
+        os.makedirs(output_directory, exist_ok=True)  # 필터 디렉토리를 미리 생성합니다.
 
-        for video_folder in os.listdir(output_directory):
+        user_directory = f"./extracted_images/{user_id}/"
+        for video_folder in os.listdir(user_directory):
             if '_face' in video_folder:
-                folder_path = os.path.join(output_directory, video_folder)
+                folder_path = os.path.join(user_directory, video_folder)
                 if os.path.isdir(folder_path):
                     try:
-                        info_dict, image_files = gather_info_from_files(folder_path) #필터링 제거하고 딕셔너리와 이미지 파일만 생성
+                        info_dict, image_files = gather_info_from_files(folder_path) # 필터링 제거하고 딕셔너리와 이미지 파일만 생성
 
                         output_file = os.path.join(output_directory, f"{video_folder}_info.txt")
-                        filtered_persons = save_info_to_txt(info_dict, output_file, filter_gender, filter_age, filter_color, filter_clothes) #필터링을 해당 메서드에 넣음
+                        filtered_persons = save_info_to_txt(info_dict, output_file, filter_gender, filter_age, filter_color, filter_clothes) # 필터링을 해당 메서드에 넣음
                         print(f"Information saved to {output_file}")
 
-                        clip_folder = folder_path.replace('_face', '_clip')
+                        clip_folder = os.path.join(output_directory, video_folder.replace('_face', '_clip'))
+                        os.makedirs(clip_folder, exist_ok=True)  # 클립 폴더를 생성
                         save_best_faces(image_files, clip_folder, info_dict, filtered_persons)
                     except Exception as e:
                         print(f"Error processing folder {folder_path}: {e}")
+
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
