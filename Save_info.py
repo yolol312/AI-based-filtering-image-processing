@@ -17,7 +17,7 @@ def parse_filename(filename):
         return person_id, frame, gender, age, color, clothes
     return None
 
-def gather_info_from_files(directory, filter_gender, filter_age, filter_color, filter_clothes):
+def gather_info_from_files(directory):
     info_dict = {}
     image_files = []
     
@@ -27,14 +27,10 @@ def gather_info_from_files(directory, filter_gender, filter_age, filter_color, f
             if parsed_info:
                 person_id, frame, gender, age, color, clothes = parsed_info
 
-                if (filter_gender is None or filter_gender == 'any' or filter_gender == gender) and \
-                   (filter_age is None or filter_age == 'any' or filter_age == age) and \
-                   (filter_color is None or filter_color == 'any' or filter_color == color) and \
-                   (filter_clothes is None or filter_clothes == 'any' or filter_clothes == clothes):
-                    if person_id not in info_dict:
-                        info_dict[person_id] = []
-                    info_dict[person_id].append((frame, gender, age, color, clothes))
-                    image_files.append((person_id, os.path.join(directory, file)))
+                if person_id not in info_dict:
+                    info_dict[person_id] = []
+                info_dict[person_id].append((frame, gender, age, color, clothes))
+                image_files.append((person_id, os.path.join(directory, file)))
 
     for person_id in info_dict:
         info_dict[person_id].sort()  # 프레임을 낮은 순으로 정렬
@@ -135,12 +131,12 @@ def save_best_faces(image_files, output_folder, info_dict, filtered_persons):
 
 if __name__ == "__main__":
     try:
-        video_name = sys.argv[1] # video_name 인수를 추가로 받음
-        user_id = sys.argv[2]
-        filter_gender = sys.argv[3].lower()
-        filter_age = sys.argv[4].lower()
-        filter_color = sys.argv[5].lower()
-        filter_clothes = sys.argv[6].lower()
+        video_name = "testVideo1" # video_name 인수를 추가로 받음
+        user_id = "test"
+        filter_gender = "male"
+        filter_age = "youth"
+        filter_color = "black"
+        filter_clothes = "none"
 
         if filter_gender == '여성':
             filter_gender = 'female'
@@ -161,10 +157,10 @@ if __name__ == "__main__":
                 folder_path = os.path.join(output_directory, video_folder)
                 if os.path.isdir(folder_path):
                     try:
-                        info_dict, image_files = gather_info_from_files(folder_path, filter_gender, filter_age, filter_color, filter_clothes)
+                        info_dict, image_files = gather_info_from_files(folder_path) #필터링 제거하고 딕셔너리와 이미지 파일만 생성
 
                         output_file = os.path.join(output_directory, f"{video_folder}_info.txt")
-                        filtered_persons = save_info_to_txt(info_dict, output_file, filter_gender, filter_age, filter_color, filter_clothes)
+                        filtered_persons = save_info_to_txt(info_dict, output_file, filter_gender, filter_age, filter_color, filter_clothes) #필터링을 해당 메서드에 넣음
                         print(f"Information saved to {output_file}")
 
                         clip_folder = folder_path.replace('_face', '_clip')
