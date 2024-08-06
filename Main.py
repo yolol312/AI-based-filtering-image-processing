@@ -254,7 +254,7 @@ def process_videos(video_paths, output_dir, yolo_model_path, gender_model_path, 
 
 if __name__ == "__main__":
     try:
-        user_no = "2025"
+        user_no = sys.argv[2]
         video_directory = f"./uploaded_videos/{user_no}/"
         video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.endswith(('.mp4', '.avi', '.mov'))]
         output_directory = f"./extracted_images/{user_no}/"
