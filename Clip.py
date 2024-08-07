@@ -4,6 +4,7 @@ import pymysql
 from datetime import datetime, timedelta
 import numpy as np
 import sys
+from filelock import FileLock
 
 def get_db_connection():
     return pymysql.connect(
@@ -19,7 +20,6 @@ def get_or_video_id_by_video_name_and_user_id_and_filter_id(video_name, user_no,
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
-            # video_name에서 _person_ 이전 부분만 추출하고 _output.mp4를 추가
             base_video_name = video_name.split('_person_')[0]
             output_video_name = f"{base_video_name}_output.mp4"
             
@@ -256,18 +256,19 @@ def save_clips_to_db(clip_times, video_person_mapping):
         print("클립 정보가 데이터베이스에 저장되었습니다.")
 
 if __name__ == "__main__":
-    try:
-        user_id = sys.argv[1]
-        user_no = sys.argv[2]
-        filter_id = sys.argv[3]
-        video_names_str = sys.argv[4]
-        video_person_mapping_str = sys.argv[5]
+    lock_file_path = '/tmp/clip_processing.lock'
+    with FileLock(lock_file_path):
+        try:
+            user_id = sys.argv[1]
+            user_no = sys.argv[2]
+            filter_id = sys.argv[3]
+            video_names_str = sys.argv[4]
+            video_person_mapping_str = sys.argv[5]
 
-        video_names = video_names_str.split(',')
-        # 공백 제거
-        video_person_mapping = {k.strip(): int(v.strip()) for k, v in (item.split(':') for item in video_person_mapping_str.split(','))}
+            video_names = video_names_str.split(',')
+            video_person_mapping = {k.strip(): int(v.strip()) for k, v in (item.split(':') for item in video_person_mapping_str.split(','))}
 
-        process_clips_for_videos(video_names, user_id, user_no, video_person_mapping, filter_id)
-    except Exception as e:
-        print(f"An error occurred: {str(e)}", file=sys.stderr)
-        sys.exit(1)
+            process_clips_for_videos(video_names, user_id, user_no, video_person_mapping, filter_id)
+        except Exception as e:
+            print(f"An error occurred: {str(e)}", file=sys.stderr)
+            sys.exit(1)
