@@ -61,7 +61,6 @@ IMAGE_SAVE_PATH = 'uploaded_images'
 os.makedirs(VIDEO_SAVE_PATH, exist_ok=True)
 os.makedirs(IMAGE_SAVE_PATH, exist_ok=True)
 
-# 트래킹 비디오 처리 완료 여부 추적 클래스
 class TrackingTaskManager:
     def __init__(self, missing_videos, callback):
         self.missing_videos = missing_videos
@@ -69,14 +68,16 @@ class TrackingTaskManager:
         self.completed_tasks = 0
         self.total_tasks = len(missing_videos)
         self.lock = threading.Lock()
+        self.callback_called = False  # 콜백 함수가 호출되었는지 추적
 
     def task_completed(self):
         with self.lock:
             self.completed_tasks += 1
-            if self.completed_tasks == self.total_tasks:
+            if self.completed_tasks == self.total_tasks and not self.callback_called:
                 if callable(self.callback):
                     self.callback()
-                    self.callback = None  # 콜백 함수가 다시 호출되지 않도록 설정
+                    self.callback_called = True  # 콜백 함수가 다시 호출되지 않도록 설정
+
 
 # person_id를 기반으로 person_no 리스트를 찾기
 def get_person_nos(person_id, user_no, filter_id):
@@ -715,8 +716,8 @@ def save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id,
         connection.close()
     return saved_paths
 
-def clip_video(video_name, user_id, or_video_id, filter_id, video_names_for_clip_process, video_person_mapping):
-    task_key = get_task_key(user_id, video_name, filter_id)
+def clip_video(user_id, or_video_id, filter_id, video_names_for_clip_process, video_person_mapping):
+    task_key = get_task_key(user_id, "clip", filter_id)
     if get_task_status(task_key) == 'running':
         print(f"Task {task_key} is already running")
         return
@@ -725,7 +726,7 @@ def clip_video(video_name, user_id, or_video_id, filter_id, video_names_for_clip
     print(f"Task {task_key} started")
 
     try:
-        lock_file_path = f'/tmp/{user_id}_{video_name}_{filter_id}.lock'
+        lock_file_path = f'/tmp/{user_id}_{filter_id}_clip.lock'
         with FileLock(lock_file_path):
             user_no = get_user_no(user_id)
             if user_no is not None:
@@ -800,7 +801,7 @@ def tracking_video_with_image_callback(video_name, user_id, or_video_id, filter_
             print(f"{video_name} 트래킹 영상 추출 성공")
             task_manager.task_completed()
     except Exception as e:
-        print(f"Error occurred: {str(e)}")
+        print(f"An unexpected error occurred: {str(e)}")
     finally:
         set_task_status(task_key, 'completed')
         print(f"Tracking task {task_key} completed")
@@ -1101,15 +1102,20 @@ def upload_image(webcam_id):
 def get_Person_to_clip():
     user_id = request.args.get('user_id')
     person_id = request.args.get('person_id')
-    filter_id = "1"
+    filter_id = request.args.get('filter_id')
 
     if not user_id:
         return jsonify({"error": "User ID is required"}), 400
 
     if not person_id:
         return jsonify({"error": "Person ID is required"}), 400
+    
+    if not filter_id:
+        return jsonify({"error": "Filter_ID is required"}), 400
+    
+    print(f"clip_process_info : userid : {user_id} personid : {person_id} filterid : {filter_id}")
 
-    task_key = f'{user_id}_{person_id}'
+    task_key = f'{user_id}_{person_id}_{filter_id}'
     if get_task_status(task_key) == 'running':
         print(f"Task {task_key} is already running")
         return jsonify({"message": "Task is already running"}), 200
@@ -1162,30 +1168,46 @@ def get_Person_to_clip():
 
                 image_path = os.path.join(image_dir, image_files[0]).replace("\\", "/")
 
-                def tracking_callback():
-                    for name in missing_videos:
-                        clip_video(name, user_id, or_video_ids[0], filter_id, video_names_for_clip_process, video_person_mapping)
-                    set_task_status(task_key, 'completed')
+                # Create a task manager instance
+                task_manager = TrackingTaskManager(missing_videos, lambda: clip_video(user_id, or_video_ids[0], filter_id, video_names_for_clip_process, video_person_mapping))
 
-                task_manager = TrackingTaskManager(missing_videos, tracking_callback)
+                def tracking_callback(video_name, image_path):
+                    tracking_video_with_image_callback(video_name, user_id, or_video_ids[0], filter_id, [image_path], task_manager)
 
                 def create_tracking_videos():
-                    try:
+                    futures = []
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
                         for name in missing_videos:
-                            tracking_video_with_image_callback(name, user_id, or_video_ids[0], filter_id, [image_path], task_manager)
+                            # 각 비디오마다 올바른 이미지 경로를 가져오기
+                            image_dir = f'./extracted_images/{user_id}/filter_{filter_id}/{name}_clip/person_{person_id}/'
+                            image_files = [f for f in os.listdir(image_dir) if f.endswith('.jpg') or f.endswith('.png')]
+                            if not image_files:
+                                print(f"No image files found for {name}")
+                                continue
 
-                        if clip_count == 0:
-                            clip_video(video_names_for_clip_process[0], user_id, or_video_ids[0], filter_id, video_names_for_clip_process, video_person_mapping)
+                            image_path = os.path.join(image_dir, image_files[0]).replace("\\", "/")
+                            futures.append(executor.submit(tracking_callback, name, image_path))
 
+                        # 모든 트래킹 작업이 완료될 때까지 기다립니다.
+                        for future in concurrent.futures.as_completed(futures):
+                            try:
+                                future.result()
+                            except Exception as e:
+                                print(f"Error occurred while creating tracking videos: {str(e)}")
+
+                # 트래킹 작업을 비동기로 시작합니다.
+                executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                future = executor.submit(create_tracking_videos)
+
+                def check_future():
+                    if future.done():
                         set_task_status(task_key, 'completed')
-                    except Exception as e:
-                        print(f"Error occurred while creating tracking videos: {str(e)}")
-                        set_task_status(task_key, 'failed')
+                        future.result()  # 작업 완료를 기다림
+                    else:
+                        socketio.sleep(1)
+                        check_future()
 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(create_tracking_videos)
-                    future.result()  # 작업 완료를 기다림
-
+                socketio.start_background_task(check_future)
                 return jsonify({"message": "Tracking video is being created using available images"}), 200
 
         clip_info = []
@@ -1207,6 +1229,8 @@ def get_Person_to_clip():
         connection.close()
         if get_task_status(task_key) == 'running':
             set_task_status(task_key, 'failed')
+        else:
+            set_task_status(task_key, 'completed')
         print(f"Task {task_key} completed or failed")
 
 
@@ -1672,7 +1696,7 @@ def login():
             connection.close()
     else:
         return jsonify({"error": "No data received or invalid format"}), 400
-    
+
 # 4.지도 주소 엔드포인트(Post)
 @app.route('/upload_maps', methods=['POST'])
 def upload_map():
@@ -1946,7 +1970,7 @@ def select_person():
         cursor.execute(person_sql, (filter_id,))
         person_result = cursor.fetchall()
 
-        person_dict = [dict(row) for row in person_result] if person_result else []
+        person_dict = [dict(row, filter_id=filter_id) for row in person_result] if person_result else []
 
         return jsonify({"person_info": person_dict}), 200
 
