@@ -923,7 +923,7 @@ def process_image_filter_without_image(video_name, user_id, filter_id, clip_flag
     try:
         # Main_image2.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
-            ["python", "Delete_strange_image.py", video_name, str(user_id)], 
+            ["python", "Delete_Not_Extract_Face.py", video_name, str(user_id)], 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = process.communicate()
