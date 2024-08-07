@@ -21,6 +21,18 @@ CORS(app)
 socketio = SocketIO(app)
 # 작업 상태를 추적하는 전역 변수 추가
 task_status = {}
+task_lock = threading.Lock()
+
+def get_task_key(user_id, video_name, filter_id):
+    return f"{user_id}_{video_name}_{filter_id}"
+
+def set_task_status(task_key, status):
+    with task_lock:
+        task_status[task_key] = status
+
+def get_task_status(task_key):
+    with task_lock:
+        return task_status.get(task_key, None)
 
 # 데이터베이스 연결 함수
 def get_db_connection():
@@ -61,7 +73,9 @@ class TrackingTaskManager:
         with self.lock:
             self.completed_tasks += 1
             if self.completed_tasks == self.total_tasks:
-                self.callback()
+                if callable(self.callback):
+                    self.callback()
+                    self.callback = None  # 콜백 함수가 다시 호출되지 않도록 설정
 
 # person_id를 기반으로 person_no 리스트를 찾기
 def get_person_nos(person_id, user_no, filter_id):
@@ -701,6 +715,13 @@ def save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id,
     return saved_paths
 
 def clip_video(video_name, user_id, or_video_id, filter_id, video_names_for_clip_process, video_person_mapping):
+    task_key = get_task_key(user_id, video_name, filter_id)
+    if get_task_status(task_key) == 'running':
+        print(f"Task {task_key} is already running")
+        return
+
+    set_task_status(task_key, 'running')
+
     try:
         lock_file_path = f'/tmp/{user_id}_{video_name}_{filter_id}.lock'
         with FileLock(lock_file_path):
@@ -725,9 +746,10 @@ def clip_video(video_name, user_id, or_video_id, filter_id, video_names_for_clip
                         person_nos = cursor.fetchall()
                         for person_no in person_nos:
                             update_person_face_from_clip(person_no['person_no'])
-
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
+    finally:
+        set_task_status(task_key, 'completed')
 
 # 트래킹 처리 함수 (이미지 없을 때)
 def tracking_video(video_name, user_id, or_video_id, filter_id, saved_paths):
@@ -751,8 +773,15 @@ def tracking_video(video_name, user_id, or_video_id, filter_id, saved_paths):
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-# 트래킹 콜백 처리 함수 (이미지 있을 때)
+# 트래킹 콜백 처리 함수 (이미지 있을 때) 중복 작업을 방지
 def tracking_video_with_image_callback(video_name, user_id, or_video_id, filter_id, image_paths, task_manager):
+    task_key = get_task_key(user_id, video_name, filter_id)
+    if get_task_status(task_key) == 'running':
+        print(f"Task {task_key} is already running")
+        return
+
+    set_task_status(task_key, 'running')
+
     try:
         paths_str = ','.join(image_paths)
         print(f"{video_name} => Tracking  - - - paths : {paths_str}")
@@ -767,8 +796,9 @@ def tracking_video_with_image_callback(video_name, user_id, or_video_id, filter_
             print(f"{video_name} 트래킹 영상 추출 성공")
             task_manager.task_completed()
     except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
-        task_manager.task_completed()
+        print(f"Error occurred: {str(e)}")
+    finally:
+        set_task_status(task_key, 'completed')
 
 # 트래킹 영상 정보 저장 (이미지 없을 때)
 def save_processed_video_info(video_name, user_id, user_no, or_video_id, filter_id):
