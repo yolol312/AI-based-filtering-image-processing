@@ -28,11 +28,12 @@ def get_task_key(user_id, video_name, filter_id):
 
 def set_task_status(task_key, status):
     with task_lock:
-        task_status[task_key] = status
+        task_status[task_key] = {'status': status}
 
 def get_task_status(task_key):
     with task_lock:
-        return task_status.get(task_key, None)
+        return task_status.get(task_key, {}).get('status')
+
 
 # 데이터베이스 연결 함수
 def get_db_connection():
@@ -721,6 +722,7 @@ def clip_video(video_name, user_id, or_video_id, filter_id, video_names_for_clip
         return
 
     set_task_status(task_key, 'running')
+    print(f"Task {task_key} started")
 
     try:
         lock_file_path = f'/tmp/{user_id}_{video_name}_{filter_id}.lock'
@@ -750,6 +752,7 @@ def clip_video(video_name, user_id, or_video_id, filter_id, video_names_for_clip
         print(f"An unexpected error occurred: {str(e)}")
     finally:
         set_task_status(task_key, 'completed')
+        print(f"Task {task_key} completed")
 
 # 트래킹 처리 함수 (이미지 없을 때)
 def tracking_video(video_name, user_id, or_video_id, filter_id, saved_paths):
@@ -781,6 +784,7 @@ def tracking_video_with_image_callback(video_name, user_id, or_video_id, filter_
         return
 
     set_task_status(task_key, 'running')
+    print(f"Tracking task {task_key} started")
 
     try:
         paths_str = ','.join(image_paths)
@@ -799,6 +803,7 @@ def tracking_video_with_image_callback(video_name, user_id, or_video_id, filter_
         print(f"Error occurred: {str(e)}")
     finally:
         set_task_status(task_key, 'completed')
+        print(f"Tracking task {task_key} completed")
 
 # 트래킹 영상 정보 저장 (이미지 없을 때)
 def save_processed_video_info(video_name, user_id, user_no, or_video_id, filter_id):
@@ -1095,8 +1100,8 @@ def upload_image(webcam_id):
 @app.route('/get_Person_to_clip', methods=['GET'])
 def get_Person_to_clip():
     user_id = request.args.get('user_id')
-    person_id = request.args.get('person_id')  # person_id를 추가로 받아야 합니다.
-    filter_id = "44"
+    person_id = request.args.get('person_id')
+    filter_id = "1"
 
     if not user_id:
         return jsonify({"error": "User ID is required"}), 400
@@ -1104,38 +1109,31 @@ def get_Person_to_clip():
     if not person_id:
         return jsonify({"error": "Person ID is required"}), 400
 
+    task_key = f'{user_id}_{person_id}'
+    if get_task_status(task_key) == 'running':
+        print(f"Task {task_key} is already running")
+        return jsonify({"message": "Task is already running"}), 200
+
     connection = get_db_connection()
     cursor = connection.cursor()
 
     try:
-        # user_id를 기반으로 user_no를 찾기
-        user_sql = "SELECT user_no FROM user WHERE user_id = %s"
-        cursor.execute(user_sql, (user_id,))
-        user_result = cursor.fetchone()
-
-        if user_result is None:
-            return jsonify({"error": "User not found"}), 404
-
-        user_no = user_result['user_no'] if isinstance(user_result, dict) else user_result[0]
-
-        # person_id를 기반으로 person_no 리스트를 찾기
+        set_task_status(task_key, 'running')
+        print(f"Task {task_key} started")
+        user_no = get_user_no(user_id)
         person_nos = get_person_nos(person_id, user_no, filter_id)
         if not person_nos:
             return jsonify({"error": "Person not found"}), 404
 
-        # person_no 리스트를 기반으로 or_video_id 찾기
         or_video_ids = [get_or_video_id_by_person_no(person_no) for person_no in person_nos]
-
-        # or_video_id로 or_video_name 찾기
         video_names = [get_or_video_name(or_video_id) for or_video_id in or_video_ids]
 
         video_names_for_clip_process = []
-        video_person_mapping = {}  # 비디오 이름과 person_no 매핑
+        video_person_mapping = {}
         for i, or_video_id in enumerate(or_video_ids):
             video_names_for_clip_process.extend(get_vidoe_names_by_or_video_id_and_user_no_and_filter_id(or_video_id, user_no, filter_id))
             video_person_mapping[video_names[i]] = person_nos[i]
 
-        # 경로에 비디오 파일이 존재하는지 확인
         lock_file_path = f'/tmp/{user_id}_{video_names[0]}_{person_id}.lock'
         with FileLock(lock_file_path):
             pro_videos = []
@@ -1156,12 +1154,6 @@ def get_Person_to_clip():
                 cursor.execute(clip_sql, (person_no,))
                 clip_count += cursor.fetchone()['count']
 
-            # 중복 작업 방지 로직 추가
-            task_key = f'{user_id}_{person_id}'
-            if task_key in task_status and task_status[task_key]['status'] == 'running':
-                return jsonify({"message": "Task is already running"}), 200
-            task_status[task_key] = {'status': 'running'}
-
             if missing_videos or clip_count == 0:
                 image_dir = f'./extracted_images/{user_id}/filter_{filter_id}/{video_names[0]}_clip/person_{person_id}/'
                 image_files = [f for f in os.listdir(image_dir) if f.endswith('.jpg') or f.endswith('.png')]
@@ -1170,30 +1162,32 @@ def get_Person_to_clip():
 
                 image_path = os.path.join(image_dir, image_files[0]).replace("\\", "/")
 
-                # 트래킹 완료 후 클립 비디오 생성하는 콜백 함수 정의
                 def tracking_callback():
                     for name in missing_videos:
                         clip_video(name, user_id, or_video_ids[0], filter_id, video_names_for_clip_process, video_person_mapping)
-                    task_status[task_key]['status'] = 'completed'  # 작업 완료로 상태 변경
+                    set_task_status(task_key, 'completed')
 
-                # TrackingTaskManager 인스턴스 생성
                 task_manager = TrackingTaskManager(missing_videos, tracking_callback)
 
-                # 트래킹 비디오 생성 함수 정의
                 def create_tracking_videos():
-                    for name in missing_videos:
-                        tracking_video_with_image_callback(name, user_id, or_video_ids[0], filter_id, [image_path], task_manager)
-                    
-                    # clip_count가 0인 경우에만 clip_video 함수 호출
-                    if clip_count == 0:
-                        clip_video(video_names_for_clip_process[0], user_id, or_video_ids[0], filter_id, video_names_for_clip_process, video_person_mapping)
+                    try:
+                        for name in missing_videos:
+                            tracking_video_with_image_callback(name, user_id, or_video_ids[0], filter_id, [image_path], task_manager)
 
-                # 트래킹 비디오 생성 함수 비동기로 실행
-                threading.Thread(target=create_tracking_videos).start()
-                
+                        if clip_count == 0:
+                            clip_video(video_names_for_clip_process[0], user_id, or_video_ids[0], filter_id, video_names_for_clip_process, video_person_mapping)
+
+                        set_task_status(task_key, 'completed')
+                    except Exception as e:
+                        print(f"Error occurred while creating tracking videos: {str(e)}")
+                        set_task_status(task_key, 'failed')
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(create_tracking_videos)
+                    future.result()  # 작업 완료를 기다림
+
                 return jsonify({"message": "Tracking video is being created using available images"}), 200
-        
-        # person_no 리스트를 기반으로 클립 정보 가져오기
+
         clip_info = []
         for person_no in person_nos:
             clip_sql = """
@@ -1208,12 +1202,12 @@ def get_Person_to_clip():
     except Exception as e:
         print(f"Exception: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
     finally:
         cursor.close()
         connection.close()
-        if task_key in task_status and task_status[task_key]['status'] == 'running':
-            task_status[task_key]['status'] = 'failed'  # 작업 실패로 상태 변경
+        if get_task_status(task_key) == 'running':
+            set_task_status(task_key, 'failed')
+        print(f"Task {task_key} completed or failed")
 
 
 # ffmpeg를 사용하여 비디오를 H.264 코덱으로 재인코딩.
