@@ -212,7 +212,9 @@ def create_video(image_paths, output_video_directory, fps=24):
 def process_images(image_paths, output_image_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, output_video_directory, fps=24):
     recognizer = FaceRecognizer()
     yolo_model = YOLO(yolo_model_path)
-    gender_model = YOLO(gender_model_path)
+    gender_model.load_state_dict(torch.load(gender_model_path))
+    gender_model = gender_model.to(device)
+    gender_model.eval()
     age_model = ResNetAgeModel(num_classes=4)
     age_model.load_state_dict(torch.load(age_model_path))
     age_model = age_model.to(device)
@@ -222,8 +224,6 @@ def process_images(image_paths, output_image_directory, yolo_model_path, gender_
 
     num_images = len(image_paths) - (len(image_paths) % 24)
     image_paths = image_paths[:num_images]
-
-    create_video(image_paths, output_video_directory, fps)
 
     frame_number = 1
     for i in range(0, len(image_paths), 4):
@@ -236,13 +236,13 @@ def process_images(image_paths, output_image_directory, yolo_model_path, gender_
 
 if __name__ == "__main__":
     try:
-        user_no = "test"
+        user_no = sys.argv[1]
         image_directory = f"./saved_images/{user_no}/"
         image_paths = [os.path.join(image_directory, file) for file in os.listdir(image_directory) if file.endswith(('.jpg', '.jpeg', '.png'))]
         output_image_directory = f"./realtime_extracted_images/{user_no}/"
         output_video_directory = f"./realtime_extracted_videos/{user_no}/"
         yolo_model_path = './models/yolov8x.pt'
-        gender_model_path = './models/gender_model.pt'
+        gender_model_path = './models/gender_best.pth'
         age_model_path = './models/age_best.pth'
         color_model_path = './models/color_model.pt'
         clothes_model_path = './models/clothes_class.pt'
