@@ -358,8 +358,6 @@ if __name__ == "__main__":
         known_face_paths_str = sys.argv[4]
         known_face_paths = known_face_paths_str.split(',')  # 쉼표로 분리하여 리스트로 변환
         video_directory = f"./uploaded_videos/{user_id}/"
-        
-        image_directory = f"./uploaded_images/{user_id}/"
 
         output_directory = f"./extracted_images/{user_id}/filter_{filter_id}"
         yolo_model_path = './models/yolov8x.pt'
