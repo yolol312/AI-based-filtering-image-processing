@@ -17,25 +17,20 @@ def parse_filename(filename):
         return person_id, frame, gender, age, color, clothes
     return None
 
-def gather_info_from_files(directory, filter_gender, filter_age, filter_color, filter_clothes):
+def gather_info_from_files(directory):
     info_dict = {}
     image_files = []
-
+    
     for file in os.listdir(directory):
         if file.endswith('.jpg'):
             parsed_info = parse_filename(file)
             if parsed_info:
                 person_id, frame, gender, age, color, clothes = parsed_info
 
-                # 필터 조건을 만족하는 경우에만 처리
-                if (filter_gender == 'any' or filter_gender == gender) and \
-                   (filter_age == 'any' or filter_age == age) and \
-                   (filter_color == 'any' or filter_color == color) and \
-                   (filter_clothes == 'any' or filter_clothes == clothes):
-                    if person_id not in info_dict:
-                        info_dict[person_id] = []
-                    info_dict[person_id].append((frame, gender, age, color, clothes))
-                    image_files.append((person_id, os.path.join(directory, file)))
+                if person_id not in info_dict:
+                    info_dict[person_id] = []
+                info_dict[person_id].append((frame, gender, age, color, clothes))
+                image_files.append((person_id, os.path.join(directory, file)))
 
     for person_id in info_dict:
         info_dict[person_id].sort()  # 프레임을 낮은 순으로 정렬
@@ -47,7 +42,7 @@ def get_most_common(values):
     most_common = counter.most_common(1)
     return most_common[0][0] if most_common else None
 
-def save_info_to_txt(info_dict, output_file):
+def save_info_to_txt(info_dict, output_file, filter_gender, filter_age, filter_color, filter_clothes):
     filtered_persons = []
     with open(output_file, 'w') as f:
         for person_id in sorted(info_dict.keys()):
@@ -72,10 +67,10 @@ def save_info_to_txt(info_dict, output_file):
             print(f"Person {person_id} - Color Counts: {color_counts}, Clothes Counts: {clothes_counts}")
             print(f"Person {person_id} - Most common color: {most_common_color}, Most common clothes: {most_common_clothes}")
             
-            if ((filter_gender == 'any' or filter_gender == most_common_gender) and 
-                (filter_age == 'any' or filter_age == most_common_age) and 
-                (filter_color == 'any' or filter_color == most_common_color) and 
-                (filter_clothes == 'any' or filter_clothes == most_common_clothes)):
+            if ((filter_gender is None or filter_gender == 'any' or filter_gender == most_common_gender) and 
+                (filter_age is None or filter_age == 'any' or filter_age == most_common_age) and 
+                (filter_color is None or filter_color == 'any' or filter_color == most_common_color) and 
+                (filter_clothes is None or filter_clothes == 'any' or filter_clothes == most_common_clothes)):
                 f.write(f'person_{person_id}:\n')
                 f.write(f'  gender: {most_common_gender}\n')
                 f.write(f'  age: {most_common_age}\n')
@@ -136,31 +131,46 @@ def save_best_faces(image_files, output_folder, info_dict, filtered_persons):
 
 if __name__ == "__main__":
     try:
-        video_name = "testVideo2"  # video_name 인수를 추가로 받음
-        user_id = "2025"
-        filter_gender = "female"
-        filter_age = "youth"
-        filter_color = "white"
-        filter_clothes = "shortsleevetop"
+        video_name = sys.argv[1]
+        user_id = sys.argv[2]
+        filter_id = sys.argv[3]
+        filter_gender = sys.argv[4].lower()
+        filter_age = sys.argv[5].lower()
+        filter_color = sys.argv[6].lower()
+        filter_clothes = sys.argv[7].lower()
 
-        output_directory = f"./extracted_images/{user_id}/"
-        os.makedirs(output_directory, exist_ok=True)  # 디렉토리를 미리 생성합니다.
+        if filter_gender == '여성':
+            filter_gender = 'female'
+        elif filter_gender == '남성':
+            filter_gender = 'male'
 
-        for video_folder in os.listdir(output_directory):
+        # 'none' 문자열을 None으로 변환
+        filter_gender = None if filter_gender == 'none' else filter_gender
+        filter_age = None if filter_age == 'none' else filter_age
+        filter_color = None if filter_color == 'none' else filter_color
+        filter_clothes = None if filter_clothes == 'none' else filter_clothes
+
+        output_directory = f"./extracted_images/{user_id}/filter_{filter_id}/"
+        os.makedirs(output_directory, exist_ok=True)  # 필터 디렉토리를 미리 생성합니다.
+
+        user_directory = f"./extracted_images/{user_id}/"
+        for video_folder in os.listdir(user_directory):
             if '_face' in video_folder:
-                folder_path = os.path.join(output_directory, video_folder)
+                folder_path = os.path.join(user_directory, video_folder)
                 if os.path.isdir(folder_path):
                     try:
-                        info_dict, image_files = gather_info_from_files(folder_path, filter_gender, filter_age, filter_color, filter_clothes)
+                        info_dict, image_files = gather_info_from_files(folder_path) # 필터링 제거하고 딕셔너리와 이미지 파일만 생성
 
                         output_file = os.path.join(output_directory, f"{video_folder}_info.txt")
-                        filtered_persons = save_info_to_txt(info_dict, output_file)
+                        filtered_persons = save_info_to_txt(info_dict, output_file, filter_gender, filter_age, filter_color, filter_clothes) # 필터링을 해당 메서드에 넣음
                         print(f"Information saved to {output_file}")
 
-                        clip_folder = folder_path.replace('_face', '_clip')
+                        clip_folder = os.path.join(output_directory, video_folder.replace('_face', '_clip'))
+                        os.makedirs(clip_folder, exist_ok=True)  # 클립 폴더를 생성
                         save_best_faces(image_files, clip_folder, info_dict, filtered_persons)
                     except Exception as e:
                         print(f"Error processing folder {folder_path}: {e}")
+
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

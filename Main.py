@@ -208,6 +208,12 @@ def predict_clothes(frame, clothes_model, bbox):
     # 예측이 없을 경우, 'unknown' 반환
     return "unknown"
 
+# YOLO 모델을 GPU에서 실행하도록 수정
+def load_yolo_model(model_path, device):
+    model = YOLO(model_path)
+    model.to(device)  # 모델을 GPU 또는 CPU로 이동
+    return model
+
 def process_video(video_path, output_dir, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, global_persons={}):
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     recognizer = FaceRecognizer()
@@ -216,6 +222,8 @@ def process_video(video_path, output_dir, yolo_model_path, gender_model_path, ag
     v_cap = cv2.VideoCapture(video_path)
     frame_rate = int(v_cap.get(cv2.CAP_PROP_FPS))
     frame_interval = 12 # 8프레임마다 처리
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # cpu_device = torch.device('cpu')
 
     yolo_model = YOLO(yolo_model_path)
     gender_model = YOLO(gender_model_path)
@@ -254,7 +262,7 @@ def process_videos(video_paths, output_dir, yolo_model_path, gender_model_path, 
 
 if __name__ == "__main__":
     try:
-        user_no = "2025"
+        user_no = "hyojin"
         video_directory = f"./uploaded_videos/{user_no}/"
         video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.endswith(('.mp4', '.avi', '.mov'))]
         output_directory = f"./extracted_images/{user_no}/"
@@ -262,7 +270,7 @@ if __name__ == "__main__":
         gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_best.pth'
         color_model_path = './models/color_model.pt'
-        clothes_model_path = './models/clothes_class.pt'
+        clothes_model_path = './models/clothes_model.pt'
         
         process_videos(video_paths, output_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path)
         

@@ -120,7 +120,7 @@ class FaceRecognizer:
             if track_id in tracked_faces:
                 face_ids = tracked_faces[track_id]
                 cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
-                cv2.putText(frame, face_ids, (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                #cv2.putText(frame, face_ids, (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
     def recognize_faces(self, frame, frame_number, output_dir, known_faces, tracker, video_name, yolo_model, gender_model, age_model):
         if frame is None:
@@ -215,9 +215,9 @@ class FaceRecognizer:
 
             if track_id in self.tracked_faces:
                 face_id = self.tracked_faces[track_id]
-                id_text = f"face_id: {face_id}, Gender: {gender}"
+                id_text = f"face_id: {face_id}"
                 cv2.rectangle(frame, (track_bbox[0], track_bbox[1]), (track_bbox[2], track_bbox[3]), (0, 255, 0), 2)
-                cv2.putText(frame, id_text, (track_bbox[0], track_bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                #cv2.putText(frame, id_text, (track_bbox[0], track_bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
         self.draw_bounding_boxes(frame, tracks, self.tracked_faces)
         print(f"Frame {frame_number} processed.")
@@ -225,8 +225,8 @@ class FaceRecognizer:
         return frame
 
 def calculate_tracking_parameters(interval):
-    base_max_age = 5
-    base_nn_budget = 5
+    base_max_age = 15
+    base_nn_budget = 15
     
     max_age = base_max_age + int(interval / 10)
     nn_budget = base_nn_budget + int(interval / 10)
@@ -277,7 +277,7 @@ def process_video(video_path, output_dir, known_face_paths, yolo_model_path, gen
             frame = recognizer.recognize_faces(frame, frame_number, output_dir, known_faces, tracker, video_name, yolo_model, gender_model, age_model)
         else:
             recognizer.draw_bounding_boxes(frame, [], recognizer.tracked_faces)
-
+        
         if frame_width is None or frame_height is None:
             frame_height, frame_width = frame.shape[:2]
             output_video_path = os.path.join(output_dir, f"{video_name}_clip", f"{video_name}_output.mp4")
@@ -354,13 +354,14 @@ if __name__ == "__main__":
     try:
         video_name = sys.argv[1]  # 여기에서 video_name 인수를 가져옴
         user_id = sys.argv[2]
-        known_face_paths_str = sys.argv[3]  # known_face_paths를 문자열로 받기
+        filter_id = sys.argv[3]
+        known_face_paths_str = sys.argv[4]
         known_face_paths = known_face_paths_str.split(',')  # 쉼표로 분리하여 리스트로 변환
         video_directory = f"./uploaded_videos/{user_id}/"
         
         image_directory = f"./uploaded_images/{user_id}/"
 
-        output_directory = f"./extracted_images/{user_id}/"
+        output_directory = f"./extracted_images/{user_id}/filter_{filter_id}"
         yolo_model_path = './models/yolov8x.pt'
         gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_best.pth'

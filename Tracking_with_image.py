@@ -1,4 +1,3 @@
-# 단일 트래킹 처리 (이미지 있을 때)
 import cv2
 import sys
 import os
@@ -102,7 +101,7 @@ class FaceRecognizer:
                 face_id = tracked_faces[track_id]
                 id_text = f"face_id: {face_id}"
                 cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
-                cv2.putText(frame, id_text, (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                #cv2.putText(frame, id_text, (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
     def recognize_faces(self, frame, frame_number, output_dir, known_faces, tracker, video_name, yolo_model, gender_model, age_model):
         original_shape = frame.shape[:2]
@@ -246,26 +245,19 @@ def process_video(video_path, output_dir, known_face_paths, yolo_model_path, gen
             frame_height, frame_width = frame.shape[:2]
             output_person_folder = os.path.join(output_dir, f"{video_name}_clip", person_id)
             os.makedirs(output_person_folder, exist_ok=True)
-            output_video_path = os.path.join(output_person_folder, f"{person_id}_output.mp4")
+            output_video_path = os.path.join(output_person_folder, f"{video_name}_{person_id}_output.mp4")
             video_writer = cv2.VideoWriter(output_video_path, cv2.VideoWriter_fourcc(*'mp4v'), frame_rate, (frame_width, frame_height))
 
         if video_writer:
             video_writer.write(frame)
-
-        # 현재 프레임을 화면에 표시
-        # cv2.imshow('Processed Frame', frame)
-
-        # 'q' 키를 누르면 종료
-        # if cv2.waitKey(1) & 0xFF == ord('q'):
-            # break
 
     v_cap.release()
     if video_writer:
         video_writer.release()
     cv2.destroyAllWindows()
 
-def process_videos(video_directory, output_dir, known_face_paths, yolo_model_path, gender_model_path, age_model_path, interval, target_fps=10):
-    video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.endswith(('.mp4', '.avi', '.mov'))]
+def process_videos(video_directory, output_dir, known_face_paths, yolo_model_path, gender_model_path, age_model_path, interval, video_name, target_fps=10):
+    video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.startswith(video_name) and file.endswith(('.mp4', '.avi', '.mov'))]
     
     target_recognizer = FaceRecognizer()
     target_faces = target_recognizer.load_known_faces(known_face_paths)
@@ -296,23 +288,20 @@ def process_videos(video_directory, output_dir, known_face_paths, yolo_model_pat
 
 if __name__ == "__main__":
     try:
+        video_name = sys.argv[1]
         user_id = sys.argv[2]
-        #known_face_paths_str = sys.argv[3]  # known_face_paths를 문자열로 받기
-        #known_face_paths = known_face_paths_str.split(',')  # 쉼표로 분리하여 리스트로 변환
-        #user_id = "1132"
+        filter_id = sys.argv[3]
+        known_face_paths_str = sys.argv[4]
+        known_face_paths = known_face_paths_str.split(',')  # 쉼표로 분리하여 리스트로 변환
         video_directory = f"./uploaded_videos/{user_id}/"
         
-        # 이미지 디렉토리의 모든 이미지 파일 경로 읽기
-        image_directory = f"./uploaded_images/{user_id}/"
-        known_face_paths = [os.path.join(image_directory, img_file) for img_file in os.listdir(image_directory) if img_file.lower().endswith(('.png', '.jpg', '.jpeg'))]
-
-        output_directory = f"./extracted_images/{user_id}/"
+        output_directory = f"./extracted_images/{user_id}/filter_{filter_id}"
         yolo_model_path = './models/yolov8x.pt'
         gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_best.pth'
 
-        interval = 12  # interval 값을 설정하세요.
-        process_videos(video_directory, output_directory, known_face_paths, yolo_model_path, gender_model_path, age_model_path, interval)
+        interval = 3  # interval 값을 설정하세요.
+        process_videos(video_directory, output_directory, known_face_paths, yolo_model_path, gender_model_path, age_model_path, interval, video_name)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

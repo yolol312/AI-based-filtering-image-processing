@@ -407,7 +407,7 @@ if __name__ == "__main__":
         video_directory = f"./uploaded_videos/{user_no}/"
         video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.endswith(('.mp4', '.avi', '.mov'))]
         output_directory = f"./extracted_images/{user_no}/"
-        yolo_model_path = './models/yololv8_model_new_best_only_person_focalloss_AdamW_50_Copy.pt'
+        yolo_model_path = './models/yololv8_model_new_best_only_person_focalloss_AdamW_120_Copy.pt'
         gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_best.pth'
         color_model_path = './models/color_model.pt'
