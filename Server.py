@@ -946,7 +946,7 @@ def process_image_filter_with_image(video_name, user_id, filter_id, image_path, 
     try:
         # Main_image2.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
-            ["python", "Delete_strange_image.py", video_name, str(user_id)], 
+            ["python", "Delete_Not_Extract_Face.py", video_name, str(user_id)], 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = process.communicate()
@@ -977,7 +977,7 @@ def process_video_without_images(video_name, user_id, filter_id, clip_flag=True)
         else:
             # Main_test.py 스크립트 호출 (백그라운드 실행)
             process = subprocess.Popen(
-                ["python", "Main_hyojin.py", video_name, str(user_id)], 
+                ["python", "Main.py", video_name, str(user_id)], 
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
             stdout, stderr = process.communicate()
@@ -1004,7 +1004,7 @@ def process_video_with_images(video_name, user_id, filter_id, image_path, clip_f
         # Main_image2.py 스크립트 호출 (백그라운드 실행)
         else:
             process = subprocess.Popen(
-                ["python", "Main_hyojin.py", video_name, str(user_id)], 
+                ["python", "Main.py", video_name, str(user_id)], 
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
             stdout, stderr = process.communicate()
@@ -1066,7 +1066,7 @@ def upload_image(webcam_id):
 def get_Person_to_clip():
     user_id = request.args.get('user_id')
     person_id = request.args.get('person_id')  # person_id를 추가로 받아야 합니다.
-    filter_id = "37"
+    filter_id = "44"
 
     if not user_id:
         return jsonify({"error": "User ID is required"}), 400
@@ -1553,9 +1553,10 @@ def receive_data():
 def login():
     data = request.get_json()
     print("Login attempt:", data)
+    
     if data and 'ID' in data and 'PW' in data:
         connection = get_db_connection()
-        cursor = connection.cursor()
+        cursor = connection.cursor()  # dictionary 인자 제거
 
         try:
             login_sql = """
@@ -1572,73 +1573,68 @@ def login():
                 user_id = result['user_id']
 
                 profile_sql = """
-                    SELECT 
-                        profile.user_name, 
-                        password.password
-                    FROM 
-                        profile
-                    JOIN 
-                        password ON profile.user_no = password.user_no
-                    WHERE 
-                        profile.user_no = %s;
+                    SELECT profile.user_name
+                    FROM profile
+                    WHERE profile.user_no = %s;
                 """
                 cursor.execute(profile_sql, (user_no,))
                 profile_result = cursor.fetchone()
                 user_name = profile_result['user_name'] if profile_result else "Unknown"
 
-                map_camera_sql = """
+                map_camera_provideo_sql = """
                     SELECT 
                         m.address, 
                         m.map_latitude, 
                         m.map_longitude, 
                         c.cam_name, 
                         c.cam_latitude, 
-                        c.cam_longitude
-                    FROM map m
-                    LEFT JOIN camera c ON m.map_num = c.map_num
-                    WHERE m.user_no = %s
+                        c.cam_longitude, 
+                        pv.pro_video_name, 
+                        f.filter_id,
+                        f.filter_gender,
+                        f.filter_age,
+                        f.filter_color,
+                        f.filter_clothes,
+                        f.filter_bundle
+                    FROM 
+                        map m
+                    JOIN 
+                        camera c ON m.map_num = c.map_num
+                    LEFT JOIN 
+                        origin_video orv ON c.cam_num = orv.cam_num
+                    LEFT JOIN 
+                        processed_video pv ON pv.or_video_id = orv.or_video_id
+                    LEFT JOIN 
+                        filter f ON f.filter_id = pv.filter_id
+                    WHERE 
+                        m.user_no = %s
                 """
-                cursor.execute(map_camera_sql, (user_no,))
-                map_camera_result = cursor.fetchall()
+                cursor.execute(map_camera_provideo_sql, (user_no,))
+                map_camera_provideo_result = cursor.fetchall()
 
-                # ProVideo, bundle 정보 가져오기
-                provideo_sql = """
-                    SELECT 
-                        video.pro_video_name, 
-                        video.filter_id, 
-                        filter.filter_bundle
-                    FROM user
-                    JOIN processed_video AS video ON user.user_no = video.user_no
-                    JOIN filter ON video.filter_id = filter.filter_id
-                    WHERE user.user_no = %s
-                """
-                cursor.execute(provideo_sql, (user_no,))
-                provideo_result = cursor.fetchall()
-
-                # Cam Name 정보 가져오기
                 camname_sql = """
                     SELECT 
-                        cam_name
-                    FROM user, processed_video as p_video, origin_video as o_video, camera
-                    WHERE user.user_no = p_video.user_no
-                    AND p_video.or_video_id = o_video.or_video_id
-                    AND o_video.cam_num = camera.cam_num
-                    AND user.user_no = %s
+                        camera.cam_name
+                    FROM 
+                        user 
+                    JOIN 
+                        processed_video p_video ON user.user_no = p_video.user_no
+                    JOIN 
+                        origin_video o_video ON p_video.or_video_id = o_video.or_video_id
+                    JOIN 
+                        camera ON o_video.cam_num = camera.cam_num
+                    WHERE 
+                        user.user_no = %s
                 """
                 cursor.execute(camname_sql, (user_no,))
                 camname_result = cursor.fetchall()
-
-                map_camera_dict = [dict(row) for row in map_camera_result] if map_camera_result else []
-                provideo_dict = [dict(row) for row in provideo_result] if provideo_result else []
-                camname_dict = [dict(row) for row in camname_result] if camname_result else []
 
                 response_data = {
                     "message": "Login successful",
                     "user_id": user_id,
                     "user_name": user_name,
-                    "map_camera_info": map_camera_dict,
-                    "provideo_info": provideo_dict,
-                    "camname_info": camname_dict,
+                    "map_camera_provideo_info": map_camera_provideo_result,
+                    "camname_info": camname_result,
                 }
 
                 return jsonify(response_data), 200
@@ -1854,22 +1850,40 @@ def update_pro_person():
 
         # user_no를 기반으로 ProVideo와 Person을 가져오기
         # ProVideo, bundle 정보 가져오기
-        provideo_sql = """
+        map_camera_provideo_sql = """
             SELECT 
-                video.pro_video_name, 
-                video.filter_id, 
-                filter.filter_bundle
-            FROM user
-            JOIN processed_video AS video ON user.user_no = video.user_no
-            JOIN filter ON video.filter_id = filter.filter_id
-            WHERE user.user_no = %s
+                m.address, 
+                m.map_latitude, 
+                m.map_longitude, 
+                c.cam_name, 
+                c.cam_latitude, 
+                c.cam_longitude, 
+                pv.pro_video_name, 
+                f.filter_id,
+                f.filter_gender,
+                f.filter_age,
+                f.filter_color,
+                f.filter_clothes,
+                f.filter_bundle
+            FROM 
+                map m
+            JOIN 
+                camera c ON m.map_num = c.map_num
+            LEFT JOIN 
+                origin_video orv ON c.cam_num = orv.cam_num
+            LEFT JOIN 
+                processed_video pv ON pv.or_video_id = orv.or_video_id
+            LEFT JOIN 
+                filter f ON f.filter_id = pv.filter_id
+            WHERE 
+                m.user_no = %s
         """
-        cursor.execute(provideo_sql, (user_no,))
-        provideo_result = cursor.fetchall()
+        cursor.execute(map_camera_provideo_sql, (user_no,))
+        map_camera_provideo_result = cursor.fetchall()
 
-        provideo_dict = [dict(row) for row in provideo_result] if provideo_result else []
+        provideo_dict = [dict(row) for row in map_camera_provideo_result] if map_camera_provideo_result else []
 
-        return jsonify({"provideo_person_info": provideo_dict}), 200
+        return jsonify({"provideo_info": provideo_dict}), 200
 
     except Exception as e:
         print(f"Exception: {str(e)}")
@@ -1932,7 +1946,6 @@ def map_cal():
     cursor = connection.cursor()
 
     try:
-        # clip_time, cam_name, clip_video 정보 가져오기
         clip_cam_sql = """
             SELECT
                 c.clip_id, c.clip_time, c.clip_video, cam.cam_name, cam.cam_latitude, cam.cam_longitude
@@ -1946,59 +1959,45 @@ def map_cal():
         cursor.execute(clip_cam_sql, (person_id,))
         clip_cam_result = cursor.fetchall()
         
-        # clip_time과 cam_name 정보를 저장할 리스트
         order_data = []
-        
-        # cam_name, cam_latitude, cam_longitude 정보를 저장할 리스트
         location_data = []
 
-        # 가져온 데이터를 각각의 리스트에 나눠 저장
         for row in clip_cam_result:
             order_data.append({
                 "clip_id": row['clip_id'],
-                "clip_time": row['clip_time'],
+                "clip_time": row['clip_time'].strftime("%Y-%m-%d %H:%M:%S"),
                 "cam_name": row['cam_name']
             })
             location_data.append({
                 "cam_name": row['cam_name'],
-                "cam_latitude": row['cam_latitude'],
-                "cam_longitude": row['cam_longitude']
+                "cam_latitude": float(row['cam_latitude']),
+                "cam_longitude": float(row['cam_longitude'])
             })
         
-        # 시간대 순서에 맞게 order_data 정렬
         sorted_order_data = sorted(order_data, key=lambda x: x['clip_time'])
-
-        # 정렬된 데이터에서 cam_name 순서 추출
         cam_name_order = [entry['cam_name'] for entry in sorted_order_data]
-
-        # cam_name_order 리스트를 '/'로 결합된 문자열로 변환
         cam_name_order_str = '/'.join(cam_name_order)
 
-        # 거리계산에 맞게 형태 변환
         coordinates = {entry['cam_name']: (entry['cam_latitude'], entry['cam_longitude']) for entry in location_data}
-
-        # 총 거리 계산
         distance = total_distance(coordinates, cam_name_order)
 
-        # 시작 시간과 끝 시간 추출
         start_time = sorted_order_data[0]['clip_time']
-        
-        # 끝 시간을 계산하기 위해 마지막 클립의 길이를 가져오기
-        last_clip = sorted_order_data[-1]
-        # last_clip_duration = get_video_duration(last_clip['clip_video'])
-        # end_time = last_clip['clip_time'] + timedelta(seconds=last_clip_duration)
-        end_time = last_clip['clip_time']
+        end_time = sorted_order_data[-1]['clip_time']
 
-        # 원 반지름 구하기 ( 시작 시간, 마지막 시간, 현재 시간, 총 거리(m) 필요)
-        # 경로 처음과 마지막 시간 사이값 / 현재 시간 불러오기 
-        radius = calculate_radius(start_time, end_time, distance, datetime.now())
+        last_camera_name = sorted_order_data[-1]['cam_name']
+        last_camera_coords = coordinates[last_camera_name]
+        last_cam_latitude = last_camera_coords[0]
+        last_cam_longitude = last_camera_coords[1]
 
-        # 시간순서대로 나열 디버깅
-        print(cam_name_order_str)
+        current_time = datetime.now()
+        radius = calculate_radius(start_time, end_time, distance, current_time)
 
         response_data = {
             "order_data": cam_name_order_str,
-            "radius": radius
+            "radius": radius,
+            "last_camera_name": last_camera_name,
+            "last_camera_latitude": last_cam_latitude,
+            "last_camera_longitude": last_cam_longitude
         }
 
         return jsonify(response_data), 200
@@ -2010,6 +2009,55 @@ def map_cal():
     finally:
         cursor.close()
         connection.close()
+
+#10. 비디오 파일 길이 계산 엔드포인트(Post)
+@app.route('/upload_progresstime', methods=['POST'])
+def upload_file_with_progress_time():
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"error": "잘못된 요청입니다."}), 400
+
+        user_id = data.get('user_id')
+        if not user_id:
+            return jsonify({"error": "사용자 ID가 누락되었습니다."}), 400
+
+        # 디렉토리 경로 설정 및 생성
+        VIDEO_SAVE_PATH = 'videos'
+        IMAGE_SAVE_PATH = 'images'
+
+        user_video_path = os.path.join(VIDEO_SAVE_PATH, str(user_id))
+        os.makedirs(user_video_path, exist_ok=True)
+
+        video_data = data.get('video_data', [])
+        total_video_length = 0
+
+        # 비디오 파일 처리
+        for video in video_data:
+            video_name = video.get('video_name')
+            video_content = video.get('video_content')
+
+            if not video_name or not video_content:
+                return jsonify({"error": "비디오 이름이나 내용이 누락되었습니다."}), 400
+
+            video_path = os.path.join(user_video_path, video_name)
+
+            # 비디오 파일 저장
+            with open(video_path, 'wb') as video_file:
+                video_file.write(base64.b64decode(video_content))
+            
+            # 비디오 파일 길이 계산
+            video_length = get_video_length(video_path)
+            total_video_length += video_length
+
+        # 성공 응답 반환
+        return jsonify({"message": "파일이 성공적으로 업로드되었습니다.", "total_length": total_video_length}), 200
+
+    except Exception as e:
+        print(f"오류 발생: {e}")
+        return jsonify({"error": "파일 업로드 중 오류가 발생했습니다."}), 500
+
 
 if __name__ == '__main__':
     print("Starting server")  # 서버 시작 디버깅 메시지
