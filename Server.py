@@ -656,7 +656,7 @@ def save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id,
 
                 person_id = person['person_id']
                 # 이미지 파일 경로 설정
-                person_image_dir = f'./extracted_images/{user_id}/{or_video_name}_clip/person_{person_id}/'
+                person_image_dir = f'./extracted_images/{user_id}/filter_{filter_id}/{or_video_name}_clip/person_{person_id}/'
                 if not os.path.exists(person_image_dir):
                     print(f"Directory not found: {person_image_dir}")
                     continue
@@ -836,9 +836,15 @@ def save_processed_video_info_without_image(video_name, user_id, user_no, or_vid
 # 트래킹 영상 정보 저장 (이미지 있을 때)    
 def save_processed_video_info_with_image(video_name, user_id, user_no, or_video_id, filter_id):
     try:
-        extracted_dir = f'./extracted_images/{user_id}/{video_name}_clip'
+        extracted_dir = f'./extracted_images/{user_id}/filter_{filter_id}/{video_name}_clip'
         if not os.path.exists(extracted_dir):
             print(f"No clip folder found for video {video_name}")
+            return
+        pro_video_name = f"{video_name}_output.mp4"
+        pro_video_path = os.path.abspath(os.path.join(extracted_dir, pro_video_name)).replace("\\", "/")
+        
+        if not os.path.exists(pro_video_path):
+            print(f"No processed video file found: {pro_video_path}")
             return
         
         connection = get_db_connection()
@@ -962,7 +968,7 @@ def process_save_face_info_with_image(video_name, user_id, or_video_id, filter_i
         else:
             print(f"{video_name} Save_info.py 정보 추출 성공")
             # 예시 메모장 파일 경로
-            info_file_path = f'./extracted_images/{user_id}/{video_name}_face_info.txt'
+            info_file_path = f'./extracted_images/{user_id}/filter_{filter_id}/{video_name}_face_info.txt'
 
             # 파싱한 person 정보
             person_info = parse_info_file(info_file_path)
@@ -983,8 +989,8 @@ def process_save_face_info_with_image(video_name, user_id, or_video_id, filter_i
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-# 벡터 추출 안되는 이미지 삭제
-def process_image_filter(video_name, user_id, filter_id, clip_flag=True):
+# 벡터 추출 안되는 이미지 삭제 후 (이미지 없을 때 정보저장 실행)
+def process_image_filter_without_image(video_name, user_id, filter_id, clip_flag=True):
     try:
         # Main_image2.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
@@ -1006,6 +1012,30 @@ def process_image_filter(video_name, user_id, filter_id, clip_flag=True):
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
+# 벡터 추출 안되는 이미지 삭제 후 (이미지 있을 때 정보저장 실행)
+def process_image_filter_with_image(video_name, user_id, filter_id, image_path, clip_flag=True):
+    try:
+        # Main_image2.py 스크립트 호출 (백그라운드 실행)
+        process = subprocess.Popen(
+            ["python", "Delete_strange_image.py", video_name, str(user_id)], 
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        stdout, stderr = process.communicate()
+
+        if process.returncode != 0:
+            print(f"Error occurred: {stderr.decode('utf-8')}")
+        else:
+            print("Delete_strange_image.py 이미지 필터링 성공")
+            # 얼굴정보추출 성공 후 save_face_info6.py 실행
+            video_path = os.path.join('uploaded_videos', user_id, video_name + ".mp4").replace("\\", "/")
+            or_video_id = get_or_video_id_by_path(video_path)
+            if or_video_id is not None:
+                process_save_face_info_with_image(video_name, user_id, or_video_id, filter_id, image_path, clip_flag)
+
+    except Exception as e:
+        print(f"An unexpected error occurred: {str(e)}")
+
+
 # 비디오 처리 함수 (이미지 없을 때)
 def process_video_without_images(video_name, user_id, filter_id, clip_flag=True):
     try:
@@ -1015,7 +1045,7 @@ def process_video_without_images(video_name, user_id, filter_id, clip_flag=True)
         # {video_name}_face 폴더가 존재하는지 확인
         if os.path.exists(face_folder_path) and os.path.isdir(face_folder_path):
             print(f"{face_folder_path} exists, skipping subprocess")
-            process_image_filter(video_name, user_id, filter_id, clip_flag)
+            process_image_filter_without_image(video_name, user_id, filter_id, clip_flag)
         else:
             # Main_test.py 스크립트 호출 (백그라운드 실행)
             process = subprocess.Popen(
@@ -1028,7 +1058,7 @@ def process_video_without_images(video_name, user_id, filter_id, clip_flag=True)
                 print(f"Error occurred: {stderr.decode('utf-8')}")
             else:
                 print("Main.py 얼굴정보추출 성공")
-                process_image_filter(video_name, user_id, filter_id, clip_flag)
+                process_image_filter_without_image(video_name, user_id, filter_id, clip_flag)
 
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
@@ -1036,6 +1066,13 @@ def process_video_without_images(video_name, user_id, filter_id, clip_flag=True)
 # 비디오 처리 함수 (이미지 있을 때)
 def process_video_with_images(video_name, user_id, filter_id, image_path, clip_flag=True):
     try:
+        # 디렉토리 경로 설정
+        face_folder_path = f"./extracted_images/{user_id}/{video_name}_face"
+        
+        # {video_name}_face 폴더가 존재하는지 확인
+        if os.path.exists(face_folder_path) and os.path.isdir(face_folder_path):
+            print(f"{face_folder_path} exists, skipping subprocess")
+            process_image_filter_with_image(video_name, user_id, filter_id, image_path, clip_flag)
         # Main_image2.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
             ["python", "Main.py", video_name, str(user_id)], 
@@ -1047,11 +1084,8 @@ def process_video_with_images(video_name, user_id, filter_id, image_path, clip_f
             print(f"Error occurred: {stderr.decode('utf-8')}")
         else:
             print("Main.py 얼굴정보추출 성공")
-            # 얼굴정보추출 성공 후 save_face_info6.py 실행
-            video_path = os.path.join('uploaded_videos', user_id, video_name + ".mp4").replace("\\", "/")
-            or_video_id = get_or_video_id_by_path(video_path)
-            if or_video_id is not None:
-                process_save_face_info_with_image(video_name, user_id, or_video_id, filter_id, image_path, clip_flag)
+            process_image_filter_with_image(video_name, user_id, filter_id, image_path, clip_flag)
+            
 
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
