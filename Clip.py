@@ -57,17 +57,21 @@ def get_video_start_time(file_label):
     finally:
         connection.close()
 
-def get_person_no(person_id, or_video_id):
+def get_person_no(person_id, or_video_id, filter_id):
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
-            sql = "SELECT person_no FROM person WHERE person_id = %s AND or_video_id = %s"
-            cursor.execute(sql, (person_id, or_video_id))
+            sql = """
+                SELECT person_no 
+                FROM person 
+                WHERE person_id = %s AND or_video_id = %s AND filter_id = %s
+            """
+            cursor.execute(sql, (person_id, or_video_id, filter_id))
             result = cursor.fetchone()
             if result:
                 return result['person_no']
             else:
-                raise ValueError(f"No person_no found for person_id: {person_id} and or_video_id: {or_video_id}")
+                raise ValueError(f"No person_no found for person_id: {person_id}, or_video_id: {or_video_id}, and filter_id: {filter_id}")
     except pymysql.MySQLError as e:
         print(f"MySQL error occurred: {str(e)}")
         return None
@@ -215,8 +219,13 @@ def save_clips_to_db(clip_times, video_person_mapping):
         with connection.cursor() as cursor:
             for clip_info in clip_times:
                 user_no = clip_info['user_no']
-                for or_video_id in get_or_video_id_by_video_name_and_user_id_and_filter_id(clip_info['video_label'], user_no, clip_info['filter_id']):
-                    person_no = get_person_no(clip_info['person_id'], or_video_id)
+                filter_id = clip_info['filter_id']
+                for or_video_id in get_or_video_id_by_video_name_and_user_id_and_filter_id(clip_info['video_label'], user_no, filter_id):
+                    person_no = get_person_no(clip_info['person_id'], or_video_id, filter_id)
+
+                    if person_no is None:
+                        print(f"No person_no found for person_id: {clip_info['person_id']} and or_video_id: {or_video_id}")
+                        continue
 
                     sql_check = """
                         SELECT COUNT(*) as count 
