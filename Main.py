@@ -7,6 +7,7 @@ from datetime import datetime
 from facenet_pytorch import MTCNN, InceptionResnetV1
 from ultralytics import YOLO
 from age_model import ResNetAgeModel, device, test_transform
+from gender_model import ResNetGenderModel, device , test_transform
 from PIL import Image
 from collections import Counter
 
@@ -144,12 +145,21 @@ class FaceRecognizer:
 
 
 def predict_gender(face_image, gender_model):
-    face_rgb = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
-    results = gender_model.predict(source=[face_rgb], save=False)
-    genders = {0: "Male", 1: "Female"}
-    gender_id = results[0].boxes.data[0][5].item()
-    return genders.get(gender_id, "Unknown")
+    if isinstance(face_image, np.ndarray):
+        face_image = Image.fromarray(face_image)
 
+    face_tensor = test_transform(face_image).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        logit = gender_model(face_tensor)
+        pred = logit.argmax(dim=1, keepdim=True).cpu().numpy()
+
+    gender_dict = {0: "Male", 1: "Female"}
+    if pred[0][0] < len(gender_dict):
+        return gender_dict[pred[0][0]]
+    else:
+        return "Unknown"
+    
 def predict_age(face_image, age_model):
     if isinstance(face_image, np.ndarray):
         face_image = Image.fromarray(face_image)
@@ -208,6 +218,12 @@ def predict_clothes(frame, clothes_model, bbox):
     # 예측이 없을 경우, 'unknown' 반환
     return "unknown"
 
+# YOLO 모델을 GPU에서 실행하도록 수정
+def load_yolo_model(model_path, device):
+    model = YOLO(model_path)
+    model.to(device)  # 모델을 GPU 또는 CPU로 이동
+    return model
+
 def process_video(video_path, output_dir, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, global_persons={}):
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     recognizer = FaceRecognizer()
@@ -217,12 +233,22 @@ def process_video(video_path, output_dir, yolo_model_path, gender_model_path, ag
     frame_rate = int(v_cap.get(cv2.CAP_PROP_FPS))
     frame_interval = 12 # 8프레임마다 처리
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    cpu_device = torch.device('cpu')
+
     yolo_model = YOLO(yolo_model_path)
-    gender_model = YOLO(gender_model_path)
+    # gender_model = YOLO(gender_model_path)
+
+    gender_model = ResNetGenderModel(num_classes=2)
+    gender_model.load_state_dict(torch.load(gender_model_path))
+    gender_model = gender_model.to(device)
+    gender_model.eval()
+
     age_model = ResNetAgeModel(num_classes=4)
     age_model.load_state_dict(torch.load(age_model_path))
     age_model = age_model.to(device)
     age_model.eval()
+
     color_model = YOLO(color_model_path)
     clothes_model = YOLO(clothes_model_path) 
 
@@ -259,7 +285,7 @@ if __name__ == "__main__":
         video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.endswith(('.mp4', '.avi', '.mov'))]
         output_directory = f"./extracted_images/{user_no}/"
         yolo_model_path = './models/yolov8x.pt'
-        gender_model_path = './models/gender_model.pt'
+        gender_model_path = './models/gender_best.pth'
         age_model_path = './models/age_best.pth'
         color_model_path = './models/color_model.pt'
         clothes_model_path = './models/clothes_class.pt'
