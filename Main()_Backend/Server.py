@@ -26,7 +26,7 @@ def get_db_connection():
         host='localhost',
         user='root',
         password='1234',
-        database='wb39_project3',
+        database='wb39_project',
         cursorclass=pymysql.cursors.DictCursor
     )
 
