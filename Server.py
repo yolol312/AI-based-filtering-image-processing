@@ -18,22 +18,6 @@ import json
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 CORS(app)
-socketio = SocketIO(app)
-# 작업 상태를 추적하는 전역 변수 추가
-task_status = {}
-task_lock = threading.Lock()
-
-def get_task_key(user_id, video_name, filter_id):
-    return f"{user_id}_{video_name}_{filter_id}"
-
-def set_task_status(task_key, status):
-    with task_lock:
-        task_status[task_key] = {'status': status}
-
-def get_task_status(task_key):
-    with task_lock:
-        return task_status.get(task_key, {}).get('status')
-
 
 # 데이터베이스 연결 함수
 def get_db_connection():
@@ -61,6 +45,23 @@ IMAGE_SAVE_PATH = 'uploaded_images'
 os.makedirs(VIDEO_SAVE_PATH, exist_ok=True)
 os.makedirs(IMAGE_SAVE_PATH, exist_ok=True)
 
+socketio = SocketIO(app)
+
+# 작업 상태를 추적하는 전역 변수 추가
+task_status = {}
+task_lock = threading.Lock()
+
+def get_task_key(user_id, video_name, filter_id):
+    return f"{user_id}_{video_name}_{filter_id}"
+
+def set_task_status(task_key, status):
+    with task_lock:
+        task_status[task_key] = {'status': status}
+
+def get_task_status(task_key):
+    with task_lock:
+        return task_status.get(task_key, {}).get('status')
+
 class TrackingTaskManager:
     def __init__(self, missing_videos, callback):
         self.missing_videos = missing_videos
@@ -80,7 +81,6 @@ class TrackingTaskManager:
                     print("Executing callback")  # 디버깅 메시지 추가
                     self.callback()
                     self.callback_called = True  # 콜백 함수가 다시 호출되지 않도록 설정
-
 
 # person_id를 기반으로 person_no 리스트를 찾기
 def get_person_nos(person_id, user_no, filter_id):
@@ -308,6 +308,26 @@ def get_filter_id_by_video_name_and_user_no_and_or_video_id(or_video_id, video_n
     except pymysql.MySQLError as e:
         print(f"MySQL error occurred: {str(e)}")
         return None
+    finally:
+        connection.close()
+
+# 여러 pro_video_id에 대한 or_video_id를 가져오는 함수
+def get_or_video_ids_by_pro_video_ids(pro_video_ids):
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            format_strings = ','.join(['%s'] * len(pro_video_ids))
+            sql = f"""
+                SELECT pro_video_id, or_video_id
+                FROM processed_video
+                WHERE pro_video_id IN ({format_strings})
+            """
+            cursor.execute(sql, tuple(pro_video_ids))
+            results = cursor.fetchall()
+            return {row['pro_video_id']: row['or_video_id'] for row in results}
+    except pymysql.MySQLError as e:
+        print(f"MySQL error occurred: {str(e)}")
+        return {}
     finally:
         connection.close()
 
@@ -1100,27 +1120,6 @@ def upload_image(webcam_id):
     
     return jsonify({"message": "Image received and saved"}), 200
 
-
-# 여러 pro_video_id에 대한 or_video_id를 가져오는 함수
-def get_or_video_ids_by_pro_video_ids(pro_video_ids):
-    connection = get_db_connection()
-    try:
-        with connection.cursor() as cursor:
-            format_strings = ','.join(['%s'] * len(pro_video_ids))
-            sql = f"""
-                SELECT pro_video_id, or_video_id
-                FROM processed_video
-                WHERE pro_video_id IN ({format_strings})
-            """
-            cursor.execute(sql, tuple(pro_video_ids))
-            results = cursor.fetchall()
-            return {row['pro_video_id']: row['or_video_id'] for row in results}
-    except pymysql.MySQLError as e:
-        print(f"MySQL error occurred: {str(e)}")
-        return {}
-    finally:
-        connection.close()
-
 # clip_video 출력을 위한 Person정보 입력받기
 @app.route('/get_Person_to_clip', methods=['GET'])
 def get_Person_to_clip():
@@ -1146,7 +1145,7 @@ def get_Person_to_clip():
 
     connection = get_db_connection()
     cursor = connection.cursor()
-
+    clip_info = []
     try:
         set_task_status(task_key, 'running')
         print(f"Task {task_key} started")
@@ -1248,7 +1247,6 @@ def get_Person_to_clip():
                 socketio.start_background_task(check_future)
                 return jsonify({"message": "Tracking video is being created using available images"}), 200
 
-        clip_info = []
         for person_no in person_nos:
             clip_sql = """
                 SELECT clip_video, clip_time FROM clip WHERE person_no = %s
@@ -1256,8 +1254,6 @@ def get_Person_to_clip():
             cursor.execute(clip_sql, (person_no,))
             clip_result = cursor.fetchall()
             clip_info.extend([dict(row) for row in clip_result] if clip_result else [])
-
-        return jsonify({"clip_info": clip_info}), 200
 
     except Exception as e:
         print(f"Exception: {str(e)}")
@@ -1270,7 +1266,7 @@ def get_Person_to_clip():
         else:
             set_task_status(task_key, 'completed')
         print(f"Task {task_key} completed or failed")
-
+        return jsonify({"clip_info": clip_info}), 200
 
 # ffmpeg를 사용하여 비디오를 H.264 코덱으로 재인코딩.
 def reencode_video(input_path, output_path):
@@ -1428,7 +1424,7 @@ def upload_file():
         
         bundle_data = data.get('bundle_data', {})
         bundle = bundle_data.get('bundle_name', '')
-
+        
         clip_flag = data.get('clip_flag', 'true').lower() != 'false'
 
         user_video_path = os.path.join(VIDEO_SAVE_PATH, str(user_id))
@@ -1442,7 +1438,7 @@ def upload_file():
         filter_id = None
         with connection.cursor() as cursor:
             filter_sql = """
-                INSERT INTO filter (filter_gender, filter_age, filter_color, filter_clothes, filter_bundle)
+                INSERT INTO filter (filter_gender, filter_age, filter_color, filter_clothes, bundle_name)
                 VALUES (%s, %s, %s, %s, %s)
             """
             cursor.execute(filter_sql, (gender, age, color, type, bundle))
@@ -1498,7 +1494,7 @@ def upload_file():
                     valid_filter_ids = []
                     for fid in filter_ids:
                         filter_info = get_filter_info(fid)
-                        if filter_info and filter_info['filter_gender'] == gender and filter_info['filter_age'] == age and filter_info['filter_color'] == color and filter_info['filter_clothes'] == type and filter_info['filter_bundle'] == bundle:
+                        if filter_info and filter_info['filter_gender'] == gender and filter_info['filter_age'] == age and filter_info['filter_color'] == color and filter_info['filter_clothes'] == type and filter_info['bundle_name'] == bundle:
                             valid_filter_ids.append(fid)
                     if valid_filter_ids:
                         video_filter_map[video_name] = valid_filter_ids
@@ -1683,7 +1679,7 @@ def login():
                         f.filter_age,
                         f.filter_color,
                         f.filter_clothes,
-                        f.filter_bundle
+                        f.bundle_name
                     FROM 
                         map m
                     JOIN 
@@ -1736,7 +1732,7 @@ def login():
             connection.close()
     else:
         return jsonify({"error": "No data received or invalid format"}), 400
-
+    
 # 4.지도 주소 엔드포인트(Post)
 @app.route('/upload_maps', methods=['POST'])
 def upload_map():
@@ -1864,7 +1860,7 @@ def upload_cameras():
         print(f"An error occurred: {str(e)}")
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-# 6.지도 업데이트 엔드포인트 (GET)
+# 6.지도 업데이트 엔드포인트 (GET) # 쓰레기
 @app.route('/update_maps', methods=['GET'])
 def upload_maps():
     user_id = request.args.get('user_id')
@@ -1916,7 +1912,7 @@ def upload_maps():
 
 # 7.ProVideo 업데이트 엔드포인트 (GET)
 @app.route('/update_pro_video', methods=['GET'])
-def update_pro_person():
+def update_pro_video():
     user_id = request.args.get('user_id')
     
     if not user_id:
@@ -1936,8 +1932,7 @@ def update_pro_person():
 
         user_no = user_result['user_no']
 
-        # user_no를 기반으로 ProVideo와 Person을 가져오기
-        # ProVideo, bundle 정보 가져오기
+        # map, ProVideo, bundle 정보 가져오기
         map_camera_provideo_sql = """
             SELECT 
                 m.address, 
@@ -1952,7 +1947,7 @@ def update_pro_person():
                 f.filter_age,
                 f.filter_color,
                 f.filter_clothes,
-                f.filter_bundle
+                f.bundle_name
             FROM 
                 map m
             JOIN 
@@ -1969,9 +1964,9 @@ def update_pro_person():
         cursor.execute(map_camera_provideo_sql, (user_no,))
         map_camera_provideo_result = cursor.fetchall()
 
-        provideo_dict = [dict(row) for row in map_camera_provideo_result] if map_camera_provideo_result else []
+        map_camera_provideo_dict = [dict(row) for row in map_camera_provideo_result] if map_camera_provideo_result else []
 
-        return jsonify({"provideo_info": provideo_dict}), 200
+        return jsonify({"map_camera_provideo_info": map_camera_provideo_dict}), 200
 
     except Exception as e:
         print(f"Exception: {str(e)}")
@@ -1985,29 +1980,45 @@ def update_pro_person():
 @app.route('/select_person', methods=['GET'])
 def select_person():
     filter_id = request.args.get('filter_id')
+    pro_video_name = request.args.get('pro_video_name')
 
     if not filter_id:
         return jsonify({"error": "Filter Id is required"}), 400
+    
+    if not pro_video_name:
+        return jsonify({"error": "Processed Video Name is required"}), 400
 
     connection = get_db_connection()
     cursor = connection.cursor()
 
     try:
+        # pro_video_name을 기반으로 pro_video_id를 찾기
+        pro_video_id_sql = "SELECT pro_video_id FROM processed_video as pv WHERE pv.pro_video_name = %s AND pv.filter_id = %s"
+        cursor.execute(pro_video_id_sql, (pro_video_name, filter_id))
+        pro_video_id_result = cursor.fetchone()
+
+        if pro_video_id_result is None:
+            return jsonify({"error": "User not found"}), 404
+
+        pro_video_id = pro_video_id_result['pro_video_id']
+
         # filter_id를 기반으로 Person을 가져오기
         # Person 정보 가져오기
         person_sql = """
             SELECT 
-                person_id, 
-                person_age, 
-                person_gender, 
-                person_color, 
-                person_clothes, 
-                person_face
-            FROM person
+                p.person_id, 
+                p.person_age, 
+                p.person_gender, 
+                p.person_color, 
+                p.person_clothes, 
+                p.person_face
+            FROM person p
+            JOIN processed_video pv ON p.or_video_id = pv.or_video_id
             WHERE 
-                filter_id = %s
+                p.filter_id = %s AND
+                pv.pro_video_id = %s
             """
-        cursor.execute(person_sql, (filter_id,))
+        cursor.execute(person_sql, (filter_id, pro_video_id))
         person_result = cursor.fetchall()
 
         person_dict = [dict(row, filter_id=filter_id) for row in person_result] if person_result else []
@@ -2036,11 +2047,12 @@ def map_cal():
     try:
         clip_cam_sql = """
             SELECT
-                c.clip_id, c.clip_time, c.clip_video, cam.cam_name, cam.cam_latitude, cam.cam_longitude
+                c.clip_id, c.clip_time, c.clip_video, cam.cam_name, cam.cam_latitude, cam.cam_longitude, m.address
             FROM clip c
             JOIN person p ON c.person_no = p.person_no
             JOIN origin_video o ON p.or_video_id = o.or_video_id
             JOIN camera cam ON o.cam_num = cam.cam_num
+            JOIN map m ON cam.map_num = m.map_num
             WHERE p.person_id = %s
             """
         
@@ -2049,6 +2061,7 @@ def map_cal():
         
         order_data = []
         location_data = []
+        address_data = []
 
         for row in clip_cam_result:
             order_data.append({
@@ -2060,6 +2073,9 @@ def map_cal():
                 "cam_name": row['cam_name'],
                 "cam_latitude": float(row['cam_latitude']),
                 "cam_longitude": float(row['cam_longitude'])
+            })
+            address_data.append({
+                 "address": row['address']
             })
         
         sorted_order_data = sorted(order_data, key=lambda x: x['clip_time'])
@@ -2085,7 +2101,8 @@ def map_cal():
             "radius": radius,
             "last_camera_name": last_camera_name,
             "last_camera_latitude": last_cam_latitude,
-            "last_camera_longitude": last_cam_longitude
+            "last_camera_longitude": last_cam_longitude,
+            "address": address_data
         }
 
         return jsonify(response_data), 200
@@ -2145,8 +2162,7 @@ def upload_file_with_progress_time():
     except Exception as e:
         print(f"오류 발생: {e}")
         return jsonify({"error": "파일 업로드 중 오류가 발생했습니다."}), 500
-
-
 if __name__ == '__main__':
     print("Starting server")  # 서버 시작 디버깅 메시지
     app.run(host="0.0.0.0", port=5002, debug=True)
+
