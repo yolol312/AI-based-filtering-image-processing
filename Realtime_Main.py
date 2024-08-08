@@ -138,12 +138,30 @@ class FaceRecognizer:
 
         return frame
 
+#동양인 모델
 def predict_gender(face_image, gender_model):
     face_rgb = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
     results = gender_model.predict(source=[face_rgb], save=False)
     genders = {0: "Male", 1: "Female"}
     gender_id = results[0].boxes.data[0][5].item()
     return genders.get(gender_id, "Unknown")
+
+#서양인 모델
+def predict_gender2(face_image, gender_model):
+    if isinstance(face_image, np.ndarray):
+        face_image = Image.fromarray(face_image)
+
+    face_tensor = test_transform(face_image).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        logit = gender_model(face_tensor)
+        pred = logit.argmax(dim=1, keepdim=True).cpu().numpy()
+
+    gender_dict = {0: "Male", 1: "Female"}
+    if pred[0][0] < len(gender_dict):
+        return gender_dict[pred[0][0]]
+    else:
+        return "Unknown"
 
 def predict_age(face_image, age_model):
     if isinstance(face_image, np.ndarray):
@@ -191,6 +209,12 @@ def predict_clothes(frame, clothes_model, bbox):
     
     return "unknown"
 
+# YOLO 모델을 GPU에서 실행하도록 수정
+def load_yolo_model(model_path, device):
+    model = YOLO(model_path)
+    model.to(device)  # 모델을 GPU 또는 CPU로 이동
+    return model
+
 def create_video(image_paths, output_video_directory, fps=24):
     os.makedirs(output_video_directory, exist_ok=True)
     video_name = "realtime"
@@ -209,12 +233,16 @@ def create_video(image_paths, output_video_directory, fps=24):
     video_writer.release()
     print(f"Video saved to {video_output_path}")
 
-def process_images(image_paths, output_image_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, output_video_directory, fps=24):
+def process_images(image_paths, output_image_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, output_video_directory, user_id, fps=24):
     recognizer = FaceRecognizer()
     yolo_model = YOLO(yolo_model_path)
-    gender_model.load_state_dict(torch.load(gender_model_path))
-    gender_model = gender_model.to(device)
-    gender_model.eval()
+    
+    #gender_model.load_state_dict(torch.load(gender_model_path))
+    #gender_model = gender_model.to(device)
+    #gender_model.eval()
+    #동양인 모델
+    gender_model = YOLO(gender_model_path)
+
     age_model = ResNetAgeModel(num_classes=4)
     age_model.load_state_dict(torch.load(age_model_path))
     age_model = age_model.to(device)
@@ -229,7 +257,7 @@ def process_images(image_paths, output_image_directory, yolo_model_path, gender_
     for i in range(0, len(image_paths), 4):
         image_path = image_paths[i]
         start_time = os.path.splitext(os.path.basename(image_path))[0]
-        image_name = "realtime"
+        image_name = f"realtime{user_id}"
         image = cv2.imread(image_path)
         recognizer.recognize_faces(image, frame_number, output_image_directory, image_name, yolo_model, gender_model, age_model, color_model, clothes_model)
         frame_number += 1
@@ -237,17 +265,18 @@ def process_images(image_paths, output_image_directory, yolo_model_path, gender_
 if __name__ == "__main__":
     try:
         user_no = sys.argv[1]
+        user_id = sys.argv[2]
         image_directory = f"./saved_images/{user_no}/"
         image_paths = [os.path.join(image_directory, file) for file in os.listdir(image_directory) if file.endswith(('.jpg', '.jpeg', '.png'))]
         output_image_directory = f"./realtime_extracted_images/{user_no}/"
         output_video_directory = f"./realtime_extracted_videos/{user_no}/"
         yolo_model_path = './models/yolov8x.pt'
-        gender_model_path = './models/gender_best.pth'
+        gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_best.pth'
         color_model_path = './models/color_model.pt'
         clothes_model_path = './models/clothes_class.pt'
         
-        process_images(image_paths, output_image_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, output_video_directory)
+        process_images(image_paths, output_image_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, output_video_directory, user_id)
         
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
