@@ -26,7 +26,7 @@ def get_db_connection():
         host='localhost',
         user='root',
         password='1234',
-        database='wb39_project3',
+        database='wb39_project',
         cursorclass=pymysql.cursors.DictCursor
     )
 
@@ -1308,7 +1308,7 @@ def realtime_upload_file():
             connection.commit()
             connection.close()
 
-            response = jsonify({"status": "success", "message": "Data received and processed successfully"})
+            response = jsonify({"status": "success", "message": "Data received and processed successfully", "filter_id" : filter_id})
             response.status_code = 200
             return response
 
@@ -1325,7 +1325,6 @@ def realtime_upload_file():
 # 0-1. 실시간 웹캠 이미지 전송 (Post)
 @app.route('/upload_image_<int:webcam_id>', methods=['POST'])
 def upload_image(webcam_id):
-
     data = request.get_json()
     # JSON 데이터가 제대로 수신되지 않았을 경우 확인
     if not data:
@@ -1337,7 +1336,8 @@ def upload_image(webcam_id):
     
     user_data = data.get('user_data', {})
     user_id = user_data.get('user_id', '')
-    filter_id = request.args.get('filter_id')
+    filter_id = data.get('filter_id')
+    image_data = data.get('image_data')
 
     if not user_data:
         return jsonify({"error": "User ID is required"}), 400
@@ -1348,36 +1348,44 @@ def upload_image(webcam_id):
     if not filter_id:
         return jsonify({"error": "Filter_ID is required"}), 400
     
+    if not image_data or 'image_name' not in image_data or 'image_content' not in image_data:
+        return jsonify({"error": "Invalid image data provided"}), 400
+    
     bundle_name = get_bundle_name_by_filter_id(filter_id)
     
     if webcam_id < 0 or webcam_id >= len(WEBCAM_FOLDERS):
         return jsonify({"error": "Invalid webcam ID"}), 400
 
-    if 'image' not in request.files:
-        return jsonify({"error": "No image provided"}), 400
-    
-    file = request.files['image']
-    img_array = np.frombuffer(file.read(), np.uint8)
-    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+    try:
+        # base64로 인코딩된 이미지 데이터를 디코딩
+        img_data = base64.b64decode(image_data['image_content'])
+        img_array = np.frombuffer(img_data, np.uint8)
+        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
-    if img is None:
-        return jsonify({"error": "Image decoding failed"}), 500
+        if img is None:
+            return jsonify({"error": "Image decoding failed"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Image decoding failed: {str(e)}"}), 500
 
     # 이미지 파일 저장
     starttime = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     
-    videoname = f"{user_id}{bundle_name}"
-    filename = f"{starttime}_{videoname}.jpg"
-    folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id])
+    # 이미지 이름을 사용해 파일 이름을 생성
+    filename = f"{starttime}_{image_data['image_name']}"
+    folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id], user_id)
     filepath = os.path.join(folder_path, filename).replace("\\", "/")
+    
+    # 디렉토리가 존재하지 않을 경우 생성
+    os.makedirs(folder_path, exist_ok=True)
+
     cv2.imwrite(filepath, img)
 
-    #실시간 분석 시작
+    # 실시간 분석 시작
     global realtime_flag
     realtime_flag = True
 
     # 실시간 분석 처리 함수 (최근에 업로드한 filter_id를 토큰 형태로 가지고 있어야 함)
-    realtime_process_video_without_images(videoname, user_id, filter_id, starttime)
+    realtime_process_video_without_images(filename, user_id, filter_id, starttime)
     
     print(f"Received and saved image from webcam {webcam_id} with shape: {img.shape} as {filename}")
     

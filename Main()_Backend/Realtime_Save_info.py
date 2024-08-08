@@ -161,6 +161,12 @@ if __name__ == "__main__":
         elif filter_gender == '남성':
             filter_gender = 'male'
 
+        # 'none' 문자열을 None으로 변환
+        filter_gender = None if filter_gender == 'none' else filter_gender
+        filter_age = None if filter_age == 'none' else filter_age
+        filter_color = None if filter_color == 'none' else filter_color
+        filter_clothes = None if filter_clothes == 'none' else filter_clothes
+
         output_image_directory = f"./realtime_extracted_images/{user_id}/"
         output_video_directory = f"./realtime_extracted_videos/{user_id}/"
         image_directory = f"./saved_images/{user_id}/"
