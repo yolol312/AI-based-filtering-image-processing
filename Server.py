@@ -69,12 +69,15 @@ class TrackingTaskManager:
         self.total_tasks = len(missing_videos)
         self.lock = threading.Lock()
         self.callback_called = False  # 콜백 함수가 호출되었는지 추적
+        print(f"Total tasks set to {self.total_tasks}")  # 디버깅 메시지 추가
 
     def task_completed(self):
         with self.lock:
             self.completed_tasks += 1
+            print(f"Task completed: {self.completed_tasks}/{self.total_tasks}")  # 디버깅 메시지 추가
             if self.completed_tasks == self.total_tasks and not self.callback_called:
                 if callable(self.callback):
+                    print("Executing callback")  # 디버깅 메시지 추가
                     self.callback()
                     self.callback_called = True  # 콜백 함수가 다시 호출되지 않도록 설정
 
@@ -716,7 +719,7 @@ def save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id,
         connection.close()
     return saved_paths
 
-def clip_video(user_id, or_video_id, filter_id, video_names_for_clip_process, video_person_mapping):
+def clip_video(user_id, or_video_id, filter_id, video_names_for_clip_process, video_person_mapping, person_id):
     task_key = get_task_key(user_id, "clip", filter_id)
     if get_task_status(task_key) == 'running':
         print(f"Task {task_key} is already running")
@@ -733,7 +736,7 @@ def clip_video(user_id, or_video_id, filter_id, video_names_for_clip_process, vi
                 video_names_str = ','.join(video_names_for_clip_process)
                 video_person_mapping_str = ','.join([f"{k}:{v}" for k, v in video_person_mapping.items()])
                 process = subprocess.Popen(
-                    ["python", "Clip.py", str(user_id), str(user_no), str(filter_id), video_names_str, video_person_mapping_str], 
+                    ["python", "Clip.py", str(user_id), str(user_no), str(filter_id), video_names_str, video_person_mapping_str, person_id], 
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE
                 )
                 stdout, stderr = process.communicate()
@@ -1097,6 +1100,27 @@ def upload_image(webcam_id):
     
     return jsonify({"message": "Image received and saved"}), 200
 
+
+# 여러 pro_video_id에 대한 or_video_id를 가져오는 함수
+def get_or_video_ids_by_pro_video_ids(pro_video_ids):
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            format_strings = ','.join(['%s'] * len(pro_video_ids))
+            sql = f"""
+                SELECT pro_video_id, or_video_id
+                FROM processed_video
+                WHERE pro_video_id IN ({format_strings})
+            """
+            cursor.execute(sql, tuple(pro_video_ids))
+            results = cursor.fetchall()
+            return {row['pro_video_id']: row['or_video_id'] for row in results}
+    except pymysql.MySQLError as e:
+        print(f"MySQL error occurred: {str(e)}")
+        return {}
+    finally:
+        connection.close()
+
 # clip_video 출력을 위한 Person정보 입력받기
 @app.route('/get_Person_to_clip', methods=['GET'])
 def get_Person_to_clip():
@@ -1147,8 +1171,13 @@ def get_Person_to_clip():
             pro_videos = get_pro_video_ids_by_filter_id(filter_id)
             pro_video_names = get_pro_video_names_by_ids(pro_videos)
 
+             # or_video_ids 리스트에 해당하는 pro_videos 필터링
+            pro_video_id_to_or_video_id = get_or_video_ids_by_pro_video_ids(pro_videos)
+            filtered_pro_videos = [pro_video for pro_video, or_video in pro_video_id_to_or_video_id.items() if or_video in or_video_ids]
+            filtered_pro_video_names = [name for name, pro_video in zip(pro_video_names, pro_videos) if pro_video in filtered_pro_videos]
+
             missing_videos = []
-            for name in pro_video_names:
+            for name in filtered_pro_video_names:
                 if not does_video_file_exist(user_id, name, person_id, filter_id):
                     missing_videos.append(name)
 
@@ -1169,7 +1198,7 @@ def get_Person_to_clip():
                 image_path = os.path.join(image_dir, image_files[0]).replace("\\", "/")
 
                 # Create a task manager instance
-                task_manager = TrackingTaskManager(missing_videos, lambda: clip_video(user_id, or_video_ids[0], filter_id, video_names_for_clip_process, video_person_mapping))
+                task_manager = TrackingTaskManager(missing_videos, lambda: clip_video(user_id, or_video_ids[0], filter_id, video_names_for_clip_process, video_person_mapping, person_id))
 
                 def tracking_callback(video_name, image_path):
                     tracking_video_with_image_callback(video_name, user_id, or_video_ids[0], filter_id, [image_path], task_manager)
@@ -1180,6 +1209,15 @@ def get_Person_to_clip():
                         for name in missing_videos:
                             # 각 비디오마다 올바른 이미지 경로를 가져오기
                             image_dir = f'./extracted_images/{user_id}/filter_{filter_id}/{name}_clip/person_{person_id}/'
+
+                            if not os.path.exists(image_dir):
+                                print(f"Directory does not exist: {image_dir}")
+                                if name in video_names_for_clip_process:
+                                    video_names_for_clip_process.remove(name)
+                                if name in video_person_mapping:
+                                    del video_person_mapping[name]
+                                continue
+
                             image_files = [f for f in os.listdir(image_dir) if f.endswith('.jpg') or f.endswith('.png')]
                             if not image_files:
                                 print(f"No image files found for {name}")
@@ -1387,7 +1425,9 @@ def upload_file():
         gender = filter_data.get('gender', '')
         color = filter_data.get('color', '')
         type = filter_data.get('type', '')
-        bundle = f"Apart_{user_id}"
+        
+        bundle_data = data.get('bundle_data', {})
+        bundle = bundle_data.get('bundle_name', '')
 
         clip_flag = data.get('clip_flag', 'true').lower() != 'false'
 
