@@ -296,9 +296,9 @@ if __name__ == "__main__":
         output_directory = f"./extracted_images/{user_no}/"
         yolo_model_path = './models/yolov8x.pt'
         gender_model_path = './models/gender_model.pt'
-        age_model_path = './models/age_best.pth'
+        age_model_path = './models/age_model.pth'
         color_model_path = './models/color_model.pt'
-        clothes_model_path = './models/clothes_class.pt'
+        clothes_model_path = './models/clothes_model.pt'
         
         process_videos(video_paths, output_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path)
         
