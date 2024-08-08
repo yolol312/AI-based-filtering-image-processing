@@ -1452,6 +1452,7 @@ def upload_file():
                 video_content_base64 = video.get('video_content', '')
                 start_time = video.get('start_time', '')
                 cam_name = video.get('cam_name', '')
+                address = video.get('address', '')
 
                 if video_name and video_content_base64:
                     video_content = base64.b64decode(video_content_base64)
@@ -1468,9 +1469,9 @@ def upload_file():
                         SELECT cam_num 
                         FROM camera 
                         WHERE cam_name = %s 
-                        AND map_num IN (SELECT map_num FROM map WHERE user_no = (SELECT user_no FROM user WHERE user_id = %s))
+                        AND map_num IN (SELECT map_num FROM map WHERE user_no = (SELECT user_no FROM user WHERE user_id = %s AND address = %s))
                     """
-                    cursor.execute(sql, (cam_name, user_id))
+                    cursor.execute(sql, (cam_name, user_id, address))
                     cam_results = cursor.fetchall()
                     if not cam_results:
                         print(f"No cam_num found for cam_name: {cam_name} and user_id: {user_id}")
