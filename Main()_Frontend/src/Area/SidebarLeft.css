@@ -1,0 +1,62 @@
+/* Sidebar 전체 스타일 */
+.SidebarLeft {
+  width: 23%; /* 사이드바 폭을 약간 넓힘 */
+  padding: 13px;
+  overflow-y: auto;
+  background-color: #000000; /* 배경을 검정색으로 설정 */
+  font-family: Arial, sans-serif;
+  color: #ffffff; /* 기본 텍스트 색상을 흰색으로 설정 */
+}
+
+/* 제목 스타일 */
+.SidebarLefttitle {
+  font-size: 24px; /* 제목 글꼴 크기 증가 */
+  font-weight: bold;
+  margin-bottom: 20px;
+  color: #ffffff; /* 제목 텍스트 색상 흰색 */
+  text-align: center;
+}
+
+/* 비디오 버튼 스타일 */
+.video-button {
+  display: block;
+  width: 100%;
+  padding: 12px; /* 버튼의 패딩을 약간 증가시킴 */
+  font-size: 18px; /* 버튼의 글꼴 크기 증가 */
+  font-weight: bold;
+  color: #ffffff; /* 버튼 텍스트 색상 흰색 */
+  background-color: #007bff; /* 버튼 배경색 파란색 */
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.video-button:hover {
+  background-color: white;
+}
+
+/* 선택된 비디오 버튼 스타일 */
+.video-button.selected {
+  background-color: white;
+}
+
+/* TreeView 스타일 */
+.tree-view {
+  height: 800px; /* TreeView의 높이 증가 */
+  flex-grow: 1;
+  max-width: 450px; /* TreeView의 최대 폭 증가 */
+  overflow-y: auto;
+  background-color: #000000; /* TreeView 배경 검정색으로 설정 */
+}
+
+/* TreeItem 스타일 */
+.tree-item {
+  background-color: transparent; /* 기본 배경 투명 */
+  color: #ffffff; /* 텍스트 색상 흰색 */
+  border-bottom: 1px solid #333333; /* 각 항목 아래에 다크 그레이 경계선 추가 */
+  padding: 10px 15px; /* 항목에 패딩 추가 */
+  transition: background-color 0.3s ease, color 0.3s ease; /* 부드러운 색상 전환 */
+}

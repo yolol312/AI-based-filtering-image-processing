@@ -1,0 +1,177 @@
+.file-upload-filtering {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  background-color: #f9f9f9;
+  min-height: 100vh;
+}
+
+.file-upload,
+.filtering {
+  width: 80%;
+  max-width: 800px;
+  margin-bottom: 20px;
+  padding: 20px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.file-upload h2,
+.filtering h2 {
+  text-align: center; /* 제목을 가운데 정렬 */
+  margin-bottom: 20px;
+  font-size: 24px;
+  color: #333;
+}
+
+.file-upload input[type='file'],
+.file-upload input[type='text'],
+.filtering input[type='file'],
+.filtering select {
+  width: calc(100% - 24px); /* Padding과 border를 제외한 너비 */
+  padding: 12px;
+  margin-top: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+select {
+  appearance: none; /* 기본 드롭다운 화살표 제거 */
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px;
+  font-size: 16px;
+  color: #333;
+  cursor: pointer;
+  transition: border-color 0.3s ease;
+}
+
+select:focus {
+  border-color: black;
+  outline: none;
+}
+
+select option {
+  padding: 10px;
+}
+
+.file-upload .date-time-picker {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  gap: 10px; /* 요소 간의 간격 추가 */
+}
+
+.file-upload .date-time-picker select {
+  flex: 1; /* 각 select 요소의 너비를 균등하게 설정 */
+}
+
+.file-upload .date-time-picker label {
+  flex: 0.1; /* 각 label 요소의 너비를 균등하게 설정 */
+  text-align: center; /* 레이블 중앙 정렬 */
+}
+
+.file-upload .form-group,
+.filtering .form-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start; /* 왼쪽 정렬 */
+  margin-top: 15px;
+}
+
+.file-upload .buttons,
+.filtering .buttons {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  width: 100%;
+}
+
+.file-upload .buttons button,
+.filtering button {
+  background-color: black;
+  border: none;
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.3s ease;
+}
+
+.file-upload .buttons button:hover,
+.filtering button:hover {
+  background-color: black;
+}
+
+.file-list {
+  list-style-type: none;
+  padding: 0;
+  margin-top: 20px;
+  width: 100%;
+}
+
+.file-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #ddd;
+}
+
+.file-list .file-name,
+.file-list .cam-name,
+.file-list .start-time {
+  flex: 1;
+  font-size: 16px;
+  color: #333;
+  text-align: center; /* 텍스트를 가운데 정렬 */
+}
+
+.filtering .form-group {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start; /* 왼쪽 정렬 */
+}
+
+.filtering .form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 16px;
+  color: #333;
+}
+
+.filtering .form-group select {
+  width: 100%; /* 콤보박스의 너비를 컨테이너 너비에 맞춤 */
+}
+
+.filtering .radio-group {
+  display: flex;
+  gap: 15px;
+  margin-top: 10px;
+}
+
+.form-group input[type='file'] {
+  font-size: 16px;
+}
+
+.date-time-picker label {
+  margin-top: auto; /* 라벨의 수직 정렬을 중간으로 설정 */
+  margin-bottom: auto;
+}
+
+#progress-bar {
+  width: 0;
+  height: 30px;
+  line-height: 30px;
+  background-color: black;
+  border-radius: 20px;
+  text-align: center;
+  color: white;
+  font-weight: bold;
+  transition: width 0.4s ease;
+}

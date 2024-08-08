@@ -1,0 +1,64 @@
+/* MyPageSwap.css */
+
+.MyPageSwap {
+  padding: 20px;
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  width: 100%;
+  overflow-y: auto;
+}
+
+.MyPageSwap h2 {
+  text-align: center;
+}
+
+.user-info {
+  margin-top: 20px;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+}
+
+.info-item label {
+  font-weight: bold;
+}
+
+.info-item span {
+  color: #555;
+}
+
+.change-password {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.change-password h3 {
+  margin-bottom: 10px;
+}
+
+.change-password input {
+  padding: 10px;
+  margin-right: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+}
+
+.change-password button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  background-color: black;
+  color: white;
+  cursor: pointer;
+}
+
+.change-password button:hover {
+  opacity: 0.7; /* 불투명도를 80%로 변경 */
+}

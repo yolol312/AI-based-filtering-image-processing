@@ -1,0 +1,36 @@
+/* Content.css */
+
+.content {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+  height: calc(100vh - 100px); /* 화면 높이에서 Footer 높이(100px)를 뺀 값으로 설정 */
+  box-sizing: border-box;
+  padding: 0;
+  padding-bottom: 120px; /* Footer와의 여백을 주기 위해 패딩 추가 */
+}
+
+/* 개별 비디오 컨테이너 */
+.video-container {
+  width: 50%; /* 두 개의 비디오 컨테이너를 가로로 나란히 배치 */
+  height: 50%; /* 전체 높이의 절반씩 할당 */
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+}
+
+/* 캠 화면 */
+.video-player {
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+  object-fit: cover;
+  margin: 0;
+  padding: 0;
+  border: none;
+}

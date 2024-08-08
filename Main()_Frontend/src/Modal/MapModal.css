@@ -1,0 +1,75 @@
+/* MapModal.css */
+
+.Map-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100; 
+}
+
+.Map-modal-content {
+  background: white;
+  border-radius: 8px;
+  position: relative;
+  width: 67%;
+  height: 77%;
+  display: flex;
+  flex-direction: column;
+}
+
+.Map-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/*완료 버튼*/
+.Map-modal-button-close {
+  padding: 10px 20px;
+  font-size: 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: black;
+  color: white;
+}
+
+.Map-modal-top
+{
+  border-bottom: 1px solid #ddd;
+  justify-content: flex-end;
+  padding: 30px;
+}
+
+.Map-modal-button-close:hover {
+  opacity: 0.7; /* 불투명도를 80%로 변경 */
+}
+
+.Map-modal-button:disabled {
+  background-color: #c0c0c0;
+  cursor: not-allowed;
+}
+
+.Map-modal-button-simple-close {
+  position: absolute;
+  top: 5px;
+  width: 10%;
+  right: 20px;
+  height: 40px;
+  font-size: 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: red;
+  color: white;
+}
+
+.Map-modal-button-simple-close:hover {
+  background-color: darkred;
+}

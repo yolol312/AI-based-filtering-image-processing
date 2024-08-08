@@ -1,0 +1,90 @@
+/* Modal Overlay */
+.File-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100; 
+}
+
+/* Modal Content */
+.File-modal-content {
+  background: white;
+  border-radius: 8px;
+  position: relative;
+  width: 60%;
+  height: 77%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Modal Top */
+.File-modal-top {
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: flex-end;
+  padding: 27px;
+}
+
+/* Modal Body */
+.File-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* Modal Footer */
+.File-modal-footer {
+  display: flex; /* Ensures footer content is arranged in a row */
+  justify-content: flex-end; /* Aligns buttons to the right */
+  padding: 10px;
+  border-top: 1px solid #ddd;
+}
+
+/* Close Button */
+.File-modal-button-close {
+  padding: 9px 22px; /* Increased padding for larger button size */
+  font-size: 18px; /* Increased font size for larger button text */
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: black;
+  color: white;
+  margin-left: 10px; /* Space between buttons */
+}
+
+/* Hover effect for close button */
+.File-modal-button-close:hover {
+  background-color: #007bff;
+}
+
+/* Disabled Button Style */
+.File-modal-button:disabled {
+  background-color: #c0c0c0;
+  cursor: not-allowed;
+}
+
+/* Simple Close Button */
+.File-modal-button-simple-close {
+  position: absolute;
+  top: 5px;
+  right: 20px; /* Adjusted for positioning */
+  padding: 9px 22px; /* Increased padding for larger button size */
+  font-size: 18px; /* Increased font size for larger button text */
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: red;
+  color: white;
+  height: auto; /* Set to auto to accommodate new padding */
+}
+
+/* Hover effect for simple close button */
+.File-modal-button-simple-close:hover {
+  background-color: darkred;
+}

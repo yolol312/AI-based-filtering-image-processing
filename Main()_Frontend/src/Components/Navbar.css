@@ -1,0 +1,44 @@
+/* Navbar.css */
+
+.Navbar {
+  background-color: black;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* 로고와 메뉴 리스트를 양 끝에 배치 */
+  border-bottom: 1px solid black;
+}
+
+.NavbarLogo {
+  flex: 1;
+}
+
+.NavbarLogo a {
+  color: white;
+  text-decoration: none;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.NavbarMenuList {
+  list-style-type: none;
+  display: flex;
+  margin: 0;
+  padding: 0;
+}
+
+.NavbarMenuList li {
+  margin: 0 10px;
+}
+
+.NavbarMenuList a {
+  color: white;
+  text-decoration: none;
+  font-size: 16px;
+}
+
+.NavbarUser {
+  color: white;
+  font-size: 16px;
+  margin-left: 20px;
+}

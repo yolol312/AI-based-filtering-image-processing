@@ -1,0 +1,22 @@
+.ProVideoSwap {
+  margin: 20px;
+  padding: 20px;
+  width: 100%;
+  border-radius: 10px;
+}
+
+.person-face {
+  width: 100%;
+  border-radius: 5px;
+  margin-bottom: 10px; /* 간격 줄이기 */
+}
+
+.video-container {
+  display: flex;
+  justify-content: center; /* 비디오 중앙 정렬 */
+}
+
+video {
+  width: 100%;
+  height: auto;
+}

@@ -1,0 +1,71 @@
+/* SidebarRight.css */
+.SidebarRight {
+  width: 20%;
+  border-top: 1px solid black;
+  border-right: 1px solid black;
+  padding: 20px;
+  overflow-y: auto;
+  background-color: black;
+  font-family: Arial, sans-serif;
+  color: white;
+}
+
+.SidebarRighttitle {
+  font-size: 20px;
+  margin-bottom: 10px;
+}
+
+.card {
+  border: 1px solid #ccc;
+  margin-bottom: 10px;
+  padding: 10px;
+}
+
+.card.selected {
+  background-color: #f0f0f0;
+}
+
+.person-table {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.person-table .person-row {
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+
+.person-table .person-row td {
+  padding: 5px;
+  border-top: 1px solid #ddd;
+  display: block;
+}
+
+.person-avatar {
+  max-width: 100px;
+  height: auto;
+}
+
+/* 예: SidebarRight 클래스 안의 clip-button 클래스 스타일 */
+.SidebarRight .clip-button {
+  background-color: black; /* 배경색을 검정색으로 지정 */
+  color: white; /* 글자색을 흰색으로 지정 */
+  border: none; /* 테두리 제거 */
+  padding: 8px 16px; /* 패딩 */
+  cursor: pointer; /* 마우스를 올렸을 때 포인터로 변경 */
+  margin-right: 10px; /* 오른쪽에 여백을 추가하여 버튼 간격 조정 */
+}
+
+.SidebarRight .path-button {
+  background-color: black; /* 배경색을 검정색으로 지정 */
+  color: white; /* 글자색을 흰색으로 지정 */
+  border: none; /* 테두리 제거 */
+  padding: 8px 16px; /* 패딩 */
+  cursor: pointer; /* 마우스를 올렸을 때 포인터로 변경 */
+}
+
+.SidebarRight .clip-button:hover,
+.SidebarRight .path-button:hover {
+  opacity: 0.8; /* 불투명도를 80%로 변경 */
+}
