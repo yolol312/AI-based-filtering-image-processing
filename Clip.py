@@ -78,7 +78,7 @@ def get_person_no(person_id, or_video_id, filter_id):
     finally:
         connection.close()
 
-def process_clips_for_videos(video_names, user_id, user_no, video_person_mapping, filter_id):
+def process_clips_for_videos(video_names, user_id, user_no, video_person_mapping, filter_id, personid):
     clip_times = []
     video_paths = []
 
@@ -103,23 +103,20 @@ def process_clips_for_videos(video_names, user_id, user_no, video_person_mapping
                 print(f"Error: Directory {extracted_dir} does not exist.")
                 continue
 
-            for person_id in os.listdir(extracted_dir):
-                person_folder_path = os.path.join(extracted_dir, person_id).replace("\\", "/")
+            person_folder_path = os.path.join(extracted_dir, f'person_{personid}').replace("\\", "/")
+            if os.path.isdir(person_folder_path):
+                video_files = [vf for vf in os.listdir(person_folder_path) if vf.endswith('.mp4')]
 
-                if os.path.isdir(person_folder_path):
-                    video_files = [vf for vf in os.listdir(person_folder_path) if vf.endswith('.mp4')]
+                for video_file in video_files:
+                    video_file_path = os.path.join(person_folder_path, video_file).replace("\\", "/")
+                    video_path_entry = {"file": video_file_path, "start_time": video_start_time, "person_id": personid, "user_no": user_no, "filter_id": filter_id}
+                    video_paths.append(video_path_entry)
 
-                    for video_file in video_files:
-                        video_file_path = os.path.join(person_folder_path, video_file).replace("\\", "/")
-                        person_id_number = person_id.replace('person_', '')  # 접두어 제거
-                        video_path_entry = {"file": video_file_path, "start_time": video_start_time, "person_id": person_id_number, "user_no": user_no, "filter_id": filter_id}
-                        video_paths.append(video_path_entry)
-
-    process_video_clips(video_paths, user_id, filter_id, clip_times)
+    process_video_clips(video_paths, user_id, filter_id, clip_times, personid)
     save_clips_to_db(clip_times, video_person_mapping)
 
-def process_video_clips(video_paths, user_id, filter_id, clip_times):
-    output_clips_dir = os.path.abspath(f'./extracted_images/{user_id}/filter_{filter_id}/output_clips').replace("\\", "/")
+def process_video_clips(video_paths, user_id, filter_id, clip_times, personid):
+    output_clips_dir = os.path.abspath(f'./extracted_images/{user_id}/filter_{filter_id}/person_{personid}_output_clips').replace("\\", "/")
     os.makedirs(output_clips_dir, exist_ok=True)
 
     for vp in video_paths:
@@ -264,11 +261,12 @@ if __name__ == "__main__":
             filter_id = sys.argv[3]
             video_names_str = sys.argv[4]
             video_person_mapping_str = sys.argv[5]
+            person_id = sys.argv[6]
 
             video_names = video_names_str.split(',')
             video_person_mapping = {k.strip(): int(v.strip()) for k, v in (item.split(':') for item in video_person_mapping_str.split(','))}
 
-            process_clips_for_videos(video_names, user_id, user_no, video_person_mapping, filter_id)
+            process_clips_for_videos(video_names, user_id, user_no, video_person_mapping, filter_id, person_id)
         except Exception as e:
             print(f"An error occurred: {str(e)}", file=sys.stderr)
             sys.exit(1)
