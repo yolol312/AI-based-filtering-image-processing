@@ -234,7 +234,7 @@ def process_images(image_paths, output_image_directory, yolo_model_path, gender_
 
 if __name__ == "__main__":
     try:
-        user_no = sys.argv[1]
+        user_no = sys.argv[2]
         image_directory = f"./saved_images/{user_no}/"
         image_paths = [os.path.join(image_directory, file) for file in os.listdir(image_directory) if file.endswith(('.jpg', '.jpeg', '.png'))]
         output_image_directory = f"./realtime_extracted_images/{user_no}/"

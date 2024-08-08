@@ -690,6 +690,7 @@ def process_save_face_info_without_image(video_name, user_id, or_video_id, filte
 ## 실시간 얼굴 처리 함수 (이미지 없을 때)
 def realtime_process_save_face_info_without_image(video_name, user_id, filter_id, start_time):
     try:
+        cam_num = "1" #임시변수-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
         # filter 정보 가져오기
         filter_info = get_filter_info(filter_id)
         if filter_info:
@@ -904,6 +905,7 @@ def realtime_upload_file():
         color = filter_data.get('color', '')
         type = filter_data.get('type', '')
 
+
         clip_flag = request.form.get('clip_flag', 'true').lower() != 'false'
 
         user_image_path = os.path.join(REALTIME_IMAGE_SAVE_PATH, str(user_id))
@@ -956,6 +958,7 @@ def realtime_upload_file():
 ## 0-1. 실시간 웹캠 이미지 전송(Post)
 @app.route('/realtime_upload_image_start_<int:webcam_id>', methods=['POST'])
 def realtime_upload_image_start(webcam_id):
+    filter_id = "1"  #임시변수-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
     data = request.get_json()
     # JSON 데이터가 제대로 수신되지 않았을 경우 확인
