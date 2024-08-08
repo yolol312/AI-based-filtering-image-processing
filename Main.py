@@ -143,8 +143,16 @@ class FaceRecognizer:
 
         return frame
 
-
+#동양인 모델
 def predict_gender(face_image, gender_model):
+    face_rgb = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
+    results = gender_model.predict(source=[face_rgb], save=False)
+    genders = {0: "Male", 1: "Female"}
+    gender_id = results[0].boxes.data[0][5].item()
+    return genders.get(gender_id, "Unknown")
+
+#서양인 모델
+def predict_gender2(face_image, gender_model):
     if isinstance(face_image, np.ndarray):
         face_image = Image.fromarray(face_image)
 
@@ -237,12 +245,14 @@ def process_video(video_path, output_dir, yolo_model_path, gender_model_path, ag
     cpu_device = torch.device('cpu')
 
     yolo_model = load_yolo_model(yolo_model_path, device)
-    # gender_model = YOLO(gender_model_path)
+    #동양인 모델
+    gender_model = YOLO(gender_model_path, device)
 
-    gender_model = ResNetGenderModel(num_classes=2)
-    gender_model.load_state_dict(torch.load(gender_model_path))
-    gender_model = gender_model.to(device)
-    gender_model.eval()
+    #외국인 전용 모델
+    #gender_model = ResNetGenderModel(num_classes=2)
+    #gender_model.load_state_dict(torch.load(gender_model_path))
+    #gender_model = gender_model.to(device)
+    #gender_model.eval()
 
     age_model = ResNetAgeModel(num_classes=4)
     age_model.load_state_dict(torch.load(age_model_path))
@@ -285,7 +295,7 @@ if __name__ == "__main__":
         video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.endswith(('.mp4', '.avi', '.mov'))]
         output_directory = f"./extracted_images/{user_no}/"
         yolo_model_path = './models/yolov8x.pt'
-        gender_model_path = './models/gender_best.pth'
+        gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_best.pth'
         color_model_path = './models/color_model.pt'
         clothes_model_path = './models/clothes_class.pt'
