@@ -143,12 +143,12 @@ def process_video_clips(video_paths, user_id, filter_id, clip_times, personid):
             if not ret:
                 break
 
-            lower_blue = np.array([0, 255, 0], dtype=np.uint8)
-            upper_blue = np.array([0, 255, 0], dtype=np.uint8)
-            mask = cv2.inRange(frame, lower_blue, upper_blue)
-            blue_pixel_count = cv2.countNonZero(mask)
+            lower_red = np.array([0, 0, 255], dtype=np.uint8)
+            upper_red = np.array([0, 0, 255], dtype=np.uint8)
+            mask = cv2.inRange(frame, lower_red, upper_red)
+            red_pixel_count = cv2.countNonZero(mask)
 
-            if blue_pixel_count > 0:
+            if red_pixel_count > 0:
                 if combined_writer is None:
                     clip_filename = f'{file_label}_{clip_index}.mp4'
                     combined_clip_path = os.path.join(output_clips_dir, clip_filename).replace("\\", "/")
