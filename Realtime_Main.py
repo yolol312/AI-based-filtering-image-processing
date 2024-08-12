@@ -11,6 +11,7 @@ from filelock import FileLock
 from ultralytics import YOLO
 from deep_sort_realtime.deepsort_tracker import DeepSort
 import threading
+from collections import defaultdict, Counter
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -25,6 +26,88 @@ def count_images_in_folder(folder_path):
     image_count = len([f for f in os.listdir(folder_path) if f.lower().endswith(image_extensions)])
     
     return image_count
+
+# 텍스트 파일의 예측 결과를 요약하는 함수
+def summarize_tracking_data(txt_file_path, cropped_images_dir):
+    if not os.path.exists(txt_file_path):
+        return "Making summary predictions...", "No image available"
+    
+    tracking_data = defaultdict(lambda: {
+        'genders': [],
+        'ages': [],
+        'colors': [],
+        'clothes': []
+    })
+
+    # txt 파일을 읽고 데이터를 추출합니다.
+    with open(txt_file_path, 'r') as f:
+        for line in f:
+            parts = line.strip().split(', ')
+            track_id = None
+            gender = None
+            age = None
+            color = None
+            clothes = None
+            
+            # 각 부분을 파싱합니다.
+            for part in parts:
+                if part.startswith("Track ID:"):
+                    track_id = part.split(": ")[1]
+                elif part.startswith("Gender:"):
+                    gender = part.split(": ")[1]
+                elif part.startswith("Age:"):
+                    age = part.split(": ")[1]
+                elif part.startswith("Color:"):
+                    color = part.split(": ")[1]
+                elif part.startswith("Clothes:"):
+                    clothes = part.split(": ")[1]
+
+            # Tracking ID별로 데이터를 수집합니다.
+            if track_id is not None:
+                tracking_data[track_id]['genders'].append(gender)
+                tracking_data[track_id]['ages'].append(age)
+                tracking_data[track_id]['colors'].append(color)
+                tracking_data[track_id]['clothes'].append(clothes)
+
+    # Tracking ID별로 가장 빈번한 값을 계산합니다.
+    summary = []
+    person_image_base64 = "No image available"  # 기본값 설정
+
+    for track_id, data in tracking_data.items():
+        most_common_gender = Counter(data['genders']).most_common(1)[0][0]
+        most_common_age = Counter(data['ages']).most_common(1)[0][0]
+        most_common_color = Counter(data['colors']).most_common(1)[0][0]
+        most_common_clothes = Counter(data['clothes']).most_common(1)[0][0]
+
+        summary.append(f"Track ID: {track_id}, Gender: {most_common_gender}, Age: {most_common_age}, "
+                       f"Color: {most_common_color}, Clothes: {most_common_clothes}")
+        
+        # 해당 트랙 ID와 동일한 이름의 이미지가 있는지 확인
+        image_filename = f"Person_{track_id}.jpg"
+        image_path = os.path.join(cropped_images_dir, image_filename)
+        if os.path.exists(image_path):
+            person_image = cv2.imread(image_path)
+            _, buffer = cv2.imencode('.jpg', person_image)
+            person_image_base64 = base64.b64encode(buffer).decode('utf-8')
+            break  # 첫 번째 매칭된 이미지를 저장한 후 루프 종료
+
+    # 하나의 문자열로 합칩니다.
+    return "\n".join(summary), person_image_base64
+
+# 텍스트 파일의 마지막 줄을 읽어서 반환하는 함수
+def get_last_line_from_txt(txt_file):
+    if not os.path.exists(txt_file):
+        return "Predicting..."
+
+    with open(txt_file, 'rb') as f:
+        f.seek(0, os.SEEK_END)  # 파일 끝으로 포인터 이동
+        while f.tell() > 0:
+            f.seek(-2, os.SEEK_CUR)  # 역순으로 읽기
+            if f.read(1) == b'\n':
+                break
+        last_line = f.readline().decode()
+
+    return last_line.strip()
 
 # 데이터베이스 연결 함수
 def get_db_connection():
@@ -154,15 +237,11 @@ def upload_image(webcam_id):
     
     # user_id와 filter_id 추출
     #user_id = data.get('user_id')
-    #filter_id = data.get('filter_id')
 
     user_id = "admin"
     
     #if not user_id:
         #return jsonify({"error": "User ID is required"}), 400
-
-    #if not filter_id:
-        #return jsonify({"error": "Filter ID is required"}), 400
 
     if webcam_id < 0 or webcam_id >= len(WEBCAM_FOLDERS):
         return jsonify({"error": "Invalid webcam ID"}), 400
@@ -198,16 +277,7 @@ def upload_image(webcam_id):
 
     print(f"Current count value: {image_count}")
 
-    if image_count % 72 == 0 and image_count != 0:
-        print("Threading Start")
-        # 새로운 스레드를 생성하여 백그라운드에서 스크립트를 실행
-        threading.Thread(
-            
-            target=run_background_process,
-            args=(user_id, filepath, processed_filepath)
-        ).start()
-
-    if image_count % 6 == 0 and image_count != 0:
+    if image_count % 5 == 0 and image_count != 0:
         # 실시간 트래킹 처리
         person_detections = detect_persons(img, yolo_model)
         
@@ -231,15 +301,43 @@ def upload_image(webcam_id):
         _, buffer = cv2.imencode('.jpg', img)
         image_base64 = base64.b64encode(buffer).decode('utf-8')
 
-        print(f"Received and processed image from webcam {webcam_id} with shape: {img.shape} as {filename}")
-        return jsonify({"message": "Image received and processed", "image": image_base64}), 200
+        # 예측된 데이터 읽기
+        output_txt_path = f"./realtime_saved_images/webcam_0/{user_id}/predictions.txt"
+        predictions = get_last_line_from_txt(output_txt_path)
+
+        print(f"Received and processed image from webcam {webcam_id} with shape: {img.shape} as {filename} / predictions : {predictions}")
+        return jsonify({"message": "Image received and processed", "frame": image_base64, "data" : predictions}), 200
+
+    if image_count % 72 == 0 and image_count != 0:
+        print("Threading Start")
+
+        # 새로운 스레드를 생성하여 백그라운드에서 스크립트를 실행
+        threading.Thread(
+            target=run_background_process,
+            args=(user_id, filepath, processed_filepath)
+        ).start()
+
+        # 결과 이미지를 Base64로 인코딩하여 클라이언트에 반환
+        _, buffer = cv2.imencode('.jpg', img)
+        image_base64 = base64.b64encode(buffer).decode('utf-8')
+        
+        cropped_images_dir = f"./realtime_saved_images/webcam_0/{user_id}/cropped_images/"
+        output_txt_path = f"./realtime_saved_images/webcam_0/{user_id}/predictions.txt"
+        summary_predictions, person_image = summarize_tracking_data(output_txt_path, cropped_images_dir)
+
+        print(f"Received and processed image from webcam {webcam_id} with shape: {img.shape} as {filename} / Summary Predictions : {summary_predictions}")
+        return jsonify({"message": "Image received and processed", "frame": image_base64, "sum_data": summary_predictions, "person_image" : person_image}), 200
 
     # 결과 이미지를 Base64로 인코딩하여 클라이언트에 반환
     _, buffer = cv2.imencode('.jpg', img)
     image_base64 = base64.b64encode(buffer).decode('utf-8')
 
-    print(f"Received and return image from webcam {webcam_id} with shape: {img.shape} as {filename}")
-    return jsonify({"message": "Image received and processed", "image": image_base64}), 200
+    # 예측된 데이터 읽기
+    output_txt_path = f"./realtime_saved_images/webcam_0/{user_id}/predictions.txt"
+    predictions = get_last_line_from_txt(output_txt_path)
+
+    print(f"Received and return image from webcam {webcam_id} with shape: {img.shape} as {filename} / predictions : {predictions}")
+    return jsonify({"message": "Image received and processed", "frame": image_base64, "data" : predictions}), 200
 
 # 0-2. 실시간 웹캠 이미지 전송 종료 (Post)
 @app.route('/realtime_upload_image_end_<int:webcam_id>', methods=['POST'])
