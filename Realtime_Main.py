@@ -198,10 +198,11 @@ def upload_image(webcam_id):
 
     print(f"Current count value: {image_count}")
 
-    if image_count % 24 == 0 and image_count != 0:
+    if image_count % 72 == 0 and image_count != 0:
         print("Threading Start")
         # 새로운 스레드를 생성하여 백그라운드에서 스크립트를 실행
         threading.Thread(
+            
             target=run_background_process,
             args=(user_id, filepath, processed_filepath)
         ).start()

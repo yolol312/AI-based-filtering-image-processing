@@ -148,7 +148,7 @@ class FaceRecognizer:
 
             # 바운딩 박스 크기만큼 이미지를 잘라서 저장
             person_crop = frame[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
-            crop_filename = os.path.join(output_dir, f"{track_id}.jpg")
+            crop_filename = os.path.join(output_dir, f"Person_{track_id}.jpg")
             cv2.imwrite(crop_filename, person_crop)
             print(f"Saved cropped image: {crop_filename}")
 
@@ -164,6 +164,20 @@ class FaceRecognizer:
                 })
 
         return predictions
+
+def load_processed_images(log_file):
+    """이미 처리된 이미지 목록을 로드"""
+    if not os.path.exists(log_file):
+        return set()
+    
+    with open(log_file, 'r') as f:
+        processed_images = set(line.strip() for line in f)
+    return processed_images
+
+def save_processed_image(log_file, image_file):
+    """처리된 이미지 파일명을 로그 파일에 저장"""
+    with open(log_file, 'a') as f:
+        f.write(f"{image_file}\n")
 
 def predict_gender(face_image, gender_model):
     face_rgb = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
@@ -225,7 +239,7 @@ def load_yolo_model(model_path, device):
     model.to(device)
     return model
 
-def process_images(image_dir, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, output_dir):
+def process_images(image_dir, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, output_dir, log_file, output_txt_path):
     recognizer = FaceRecognizer()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -242,22 +256,37 @@ def process_images(image_dir, yolo_model_path, gender_model_path, age_model_path
 
     tracker = DeepSort(max_age=30, nn_budget=20)  # DeepSort 트래커 설정
 
+    # 처리된 이미지 추적
+    processed_images = load_processed_images(log_file)
+
     image_files = [f for f in os.listdir(image_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
 
     all_predictions = []
 
-    for frame_number, image_file in enumerate(image_files, start=1):
+    for index, image_file in enumerate(image_files, start=1):
+        if image_file in processed_images:
+            print(f"이미 처리된 이미지: {image_file}, 스킵합니다.")
+            continue
+
+        if index % 6 != 0:
+            print(f"스킵되는 이미지: {image_file}, 처리하지 않습니다.")
+            continue
+
         image_path = os.path.join(image_dir, image_file)
         frame = cv2.imread(image_path)
 
-        predictions = recognizer.recognize_faces(frame, frame_number, image_file, yolo_model, gender_model, age_model, color_model, clothes_model, tracker, output_dir)
-        all_predictions.extend(predictions)
+        predictions = recognizer.recognize_faces(frame, index, image_file, yolo_model, gender_model, age_model, color_model, clothes_model, tracker, output_dir)
+        save_predictions_to_txt(predictions, output_txt_path)
+        #all_predictions.extend(predictions)
+
+        # 처리된 이미지 로그 저장
+        save_processed_image(log_file, image_file)
 
     print("Image processing complete.")
     return all_predictions
 
 def save_predictions_to_txt(predictions, output_file):
-    with open(output_file, 'w') as f:
+    with open(output_file, 'a') as f:
         for pred in predictions:
             f.write(f"Track ID: {pred['track_id']}, Person ID: {pred['person_id']}, Image: {pred['image_name']}, "
                     f"Gender: {pred['gender']}, Age: {pred['age']}, Color: {pred['color']}, "
@@ -280,9 +309,10 @@ if __name__ == "__main__":
         os.makedirs(output_dir, exist_ok=True)
         
         output_txt_path = f"./realtime_saved_images/webcam_0/{user_no}/predictions.txt"
+        log_file = f"./realtime_saved_images/webcam_0/{user_no}/processed_images.log"
         
-        predictions = process_images(image_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, output_dir)
-        save_predictions_to_txt(predictions, output_txt_path)
+        predictions = process_images(image_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, output_dir, log_file, output_txt_path)
+        #save_predictions_to_txt(predictions, output_txt_path)
         
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
