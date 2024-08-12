@@ -27,6 +27,100 @@ def count_images_in_folder(folder_path):
     
     return image_count
 
+# user_id로 user_no 정보 가져오기
+def get_user_no(user_id):
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            sql = "SELECT user_no FROM user WHERE user_id = %s"
+            cursor.execute(sql, (user_id,))
+            result = cursor.fetchone()
+            if result:
+                return result['user_no']
+            else:
+                print(f"No record found for user_id: {user_id}")
+                return None
+    except pymysql.MySQLError as e:
+        print(f"MySQL error occurred: {str(e)}")
+        return None
+    finally:
+        connection.close()
+
+# user_id로 user_no 정보 가져오기
+def get_cam_num(user_id, cam_name):
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            sql = "SELECT cam_num FROM user WHERE user_id = %s AND cam_name = %s"
+            cursor.execute(sql, (user_id, cam_name))
+            result = cursor.fetchone()
+            if result:
+                return result['cam_num']
+            else:
+                print(f"No record found for user_id: {user_id}")
+                return None
+    except pymysql.MySQLError as e:
+        print(f"MySQL error occurred: {str(e)}")
+        return None
+    finally:
+        connection.close()
+
+# 파일명에서 시작 시간 추출하기
+def convert_filename_to_datetime(filename):
+    # 파일명에서 날짜와 시간을 추출
+    datetime_str = filename.split('_')[0] + filename.split('_')[1]
+
+    # 추출된 문자열을 datetime 객체로 변환
+    datetime_obj = datetime.strptime(datetime_str, "%Y%m%d%H%M%S")
+
+    # 원하는 형식의 문자열로 변환
+    formatted_datetime = datetime_obj.strftime("%Y-%m-%d %H:%M:%S")
+
+    return formatted_datetime
+
+# 영상 및 log 결과 DB에 저장
+def save_video_to_db(user_no, cam_num, start_time, origin_video_path, combined_video_path, txt_file_path):
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            # 원본 비디오를 origin_video 테이블에 저장
+            origin_video_name = os.path.basename(origin_video_path)
+            insert_origin_video_query = """
+                INSERT INTO origin_video (or_video_name, or_video_content, start_time, cam_num)
+                VALUES (%s, %s, %s, %s)
+            """
+            cursor.execute(insert_origin_video_query, (origin_video_name, origin_video_path, start_time, cam_num))
+            or_video_id = cursor.lastrowid  # 방금 삽입된 원본 비디오의 ID
+
+            # 처리된 비디오를 processed_video 테이블에 저장
+            processed_video_name = os.path.basename(combined_video_path)
+            insert_processed_video_query = """
+                INSERT INTO processed_video (or_video_id, pro_video_name, pro_video_content, user_no)
+                VALUES (%s, %s, %s, %s)
+            """
+            cursor.execute(insert_processed_video_query, (or_video_id, processed_video_name, combined_video_path, user_no))
+
+            # txt 파일 내용을 log 테이블에 저장
+            with open(txt_file_path, 'r') as txt_file:
+                for line in txt_file:
+                    log_data = line.strip()
+                    insert_log_query = """
+                        INSERT INTO log (log_data, user_no, cam_num)
+                        VALUES (%s, %s, %s)
+                    """
+                    cursor.execute(insert_log_query, (log_data, user_no, cam_num))
+
+            # 변경 사항 커밋
+            connection.commit()
+
+            print("Videos and logs have been saved to the database.")
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        connection.rollback()
+    finally:
+        connection.close()
+
 # 텍스트 파일의 예측 결과를 요약하는 함수
 def summarize_tracking_data(txt_file_path, cropped_images_dir):
     if not os.path.exists(txt_file_path):
@@ -115,7 +209,7 @@ def get_db_connection():
         host='localhost',
         user='root',
         password='1234',
-        database='wb39_project',
+        database='wb39_project_realtime',
         cursorclass=pymysql.cursors.DictCursor
     )
 
@@ -145,8 +239,8 @@ SAVE_FOLDER = 'realtime_saved_images'
 REALTIME_IMAGE_SAVE_PATH = 'realtime_uploaded_images'
 WEBCAM_FOLDERS = [f"webcam_{i}" for i in range(4)]
 
-# 실시간 분석 플래그
-realtime_flag = False
+# 처리 시작 시간
+starttime = ""
 
 # YOLO 모델 및 DeepSort 초기화
 yolo_model = YOLO('models/yolov8x.pt')  # YOLO 모델 경로를 적절히 설정하세요
@@ -168,47 +262,36 @@ def realtime_upload_file():
 
         user_data = data.get('user_data', {})
         user_id = user_data.get('user_id', '')
-
-        filter_data = data.get('filter_data', {})
-        top = filter_data.get('top', '')
-        bottom = filter_data.get('bottom', '')
+        cam_name = user_data.get('cam_name', '')
 
         user_image_path = os.path.join(REALTIME_IMAGE_SAVE_PATH, str(user_id))
         os.makedirs(user_image_path, exist_ok=True)
 
         connection = get_db_connection()
-        filter_id = None
 
         with connection.cursor() as cursor:
-            filter_sql = """
-                INSERT INTO realtime_filter (filter_top, filter_bottom)
-                VALUES (%s, %s)
-            """
-            cursor.execute(filter_sql, (top, bottom))
-            filter_id = cursor.lastrowid
-            print("filter DB create")
-            print(f"filter ID : {filter_id}") #filter_id를 클라이언트에게 콜백으로 돌려줘야 함
+            # 1. 사용자 추가 또는 조회 (user_id는 고유해야 함)
+            cursor.execute("SELECT user_no FROM user WHERE user_id = %s", (user_id,))
+            user_row = cursor.fetchone()
+            if user_row is None:
+                cursor.execute("INSERT INTO user (user_id) VALUES (%s)", (user_id,))
+                user_no = cursor.lastrowid
+            else:
+                user_no = user_row['user_no']
 
-            image_data = data.get('image_data', {})
-            image_name = image_data.get('image_name', '')
-            image_content_base64 = image_data.get('image_content', '')
+            # 2. 해당 user_id에 대한 cam_name 추가 또는 조회
+            cursor.execute("SELECT cam_num FROM camera WHERE cam_name = %s AND user_no = %s", (cam_name, user_no))
+            cam_row = cursor.fetchone()
+            if cam_row is None:
+                cursor.execute("INSERT INTO camera (cam_name, user_no) VALUES (%s, %s)", (cam_name, user_no))
+                cam_num = cursor.lastrowid
+            else:
+                cam_num = cam_row['cam_num']
 
-            image_path = None
-            if image_name and image_content_base64:
-                image_content = base64.b64decode(image_content_base64)
-                image_path = os.path.join(user_image_path, image_name).replace("\\", "/")
+        connection.commit()
+        connection.close()
 
-                with open(image_path, 'wb') as image_file:
-                    image_file.write(image_content)
-                print(f"Image: {image_name}")
-                print(f"Image: {image_path}")
-
-            connection.commit()
-            connection.close()
-
-            response = jsonify({"status": "success", "message": "Data received and processed successfully", "filter_id" : filter_id})
-            response.status_code = 200
-            return response
+        return jsonify({"status": "success", "message": "User and Camera added successfully", "user_no": user_no, "cam_num": cam_num}), 200
 
     except ValueError as e:
         print(f"A ValueError occurred: {str(e)}")
@@ -354,6 +437,8 @@ def realtime_upload_image_end(webcam_id):
 
     user_data = data.get('user_data', {})
     user_id = user_data.get('user_id', '')
+    #cam_name = user_data.get('cam_name', '')
+    cam_name = "우송대"
 
     if webcam_id < 0 or webcam_id >= len(WEBCAM_FOLDERS):
         return jsonify({"error": "Invalid webcam ID"}), 400
@@ -361,6 +446,7 @@ def realtime_upload_image_end(webcam_id):
     # Processed 이미지 폴더 경로 설정
     processed_folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id], "processed_images")
     origin_folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id])
+    output_txt_path = f"./realtime_saved_images/webcam_0/{user_id}/predictions.txt"
 
     # 폴더가 존재하는지 확인
     if not os.path.exists(processed_folder_path):
@@ -371,25 +457,48 @@ def realtime_upload_image_end(webcam_id):
     or_image_files = sorted([f for f in os.listdir(origin_folder_path) if f.endswith('.jpg')])
 
     # 이미지가 있는지 확인
-    if len(pro_image_files) == 0:
+    if len(or_image_files) == 0:
         return jsonify({"status": "error", "message": "No images found to create video"}), 404
 
     # 첫 번째 이미지를 읽어 크기를 가져옴
-    first_image_path = os.path.join(processed_folder_path, pro_image_files[0])
+    first_image_path = os.path.join(origin_folder_path, or_image_files[0])
     first_image = cv2.imread(first_image_path)
     height, width, layers = first_image.shape
 
-    # 비디오 작성 준비
-    video_path = os.path.join(processed_folder_path, f"{user_id}_output_video.mp4")
-    video_writer = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*'mp4v'), 20, (width, height))
+    # 원본 비디오 작성 준비
+    original_video_path = os.path.join(origin_folder_path, f"{user_id}_original_video.mp4")
+    original_video_writer = cv2.VideoWriter(original_video_path, cv2.VideoWriter_fourcc(*'mp4v'), 20, (width, height))
 
-    # 이미지들을 비디오에 작성
-    for image_file in pro_image_files:
-        image_path = os.path.join(processed_folder_path, image_file)
+    # 원본 이미지를 사용하여 원본 비디오 생성
+    for image_file in or_image_files:
+        image_path = os.path.join(origin_folder_path, image_file)
         image = cv2.imread(image_path)
-        video_writer.write(image)
+        original_video_writer.write(image)
 
-    video_writer.release()
+    original_video_writer.release()
+
+    # 원본 비디오 작성 완료
+    print(f"Original video created at {original_video_path}")
+
+    # 합쳐진 비디오 작성 준비
+    combined_video_path = os.path.join(processed_folder_path, f"{user_id}_combined_video.mp4")
+    combined_video_writer = cv2.VideoWriter(combined_video_path, cv2.VideoWriter_fourcc(*'mp4v'), 20, (width, height))
+
+    # 이미지들을 합쳐진 비디오에 작성 (원본 이미지와 처리된 이미지를 비교)
+    for image_file in or_image_files:
+        # pro_image_files에 동일한 이미지 파일명이 있는지 확인
+        if image_file in pro_image_files:
+            image_path = os.path.join(processed_folder_path, image_file)
+        else:
+            image_path = os.path.join(origin_folder_path, image_file)
+
+        image = cv2.imread(image_path)
+        combined_video_writer.write(image)
+
+    combined_video_writer.release()
+
+    # 합쳐진 비디오 작성 완료
+    print(f"Combined video created at {combined_video_path}")
 
     # 이미지 삭제(처리된 이미지)
     for image_file in pro_image_files:
@@ -400,6 +509,12 @@ def realtime_upload_image_end(webcam_id):
     for image_file in or_image_files:
         image_path = os.path.join(origin_folder_path, image_file)
         os.remove(image_path)
+
+    user_no = get_user_no(user_id)
+    cam_num = get_cam_num(user_id, cam_name)
+    start_time = convert_filename_to_datetime(or_image_files[0])
+    
+    save_video_to_db(user_no, cam_num, start_time, original_video_path, combined_video_path, output_txt_path)
     
     print(f"Received and saved image from webcam {webcam_id} End")
 
