@@ -152,10 +152,10 @@ if __name__ == "__main__":
 
         output_directory = f"./extracted_images/{user_id}/filter_{filter_id}/"
         os.makedirs(output_directory, exist_ok=True)  # 필터 디렉토리를 미리 생성합니다.
-
+        
         user_directory = f"./extracted_images/{user_id}/"
         for video_folder in os.listdir(user_directory):
-            if '_face' in video_folder:
+            if '_face' in video_folder and video_name in video_folder:  # video_name과 일치하는 폴더만 처리
                 folder_path = os.path.join(user_directory, video_folder)
                 if os.path.isdir(folder_path):
                     try:
