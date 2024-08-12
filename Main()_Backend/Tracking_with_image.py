@@ -86,22 +86,39 @@ class FaceRecognizer:
                 return known_faces[min_distance_index]['id']
         return None
 
-    def detect_persons(self, frame, yolo_model):
-        yolo_results = yolo_model.predict(source=[frame], save=False)[0]
-        person_detections = [
-            (int(data[0]), int(data[1]), int(data[2]), int(data[3]))
-            for data in yolo_results.boxes.data.tolist()
-            if float(data[4]) >= 0.85 and int(data[5]) == 0
-        ]
+    def detect_persons(self, frame, yolo_model, min_width=60, min_height=60):
+        print("Detecting persons...")
+        yolo_results = yolo_model.predict(source=[frame], save=False, classes=[0])[0]
+        person_detections = []
+        for data in yolo_results.boxes.data.tolist():
+            xmin, ymin, xmax, ymax, conf, cls = int(data[0]), int(data[1]), int(data[2]), int(data[3]), float(data[4]), int(data[5])
+        
+            # 사람만 필터링하고, 신뢰도가 충분히 높고, 크기가 임계값보다 큰 객체만 선택
+            if conf >= 0.85 and cls == 0:  # 0은 사람 클래스
+                width = xmax - xmin
+                height = ymax - ymin
+
+                # 크기가 최소 임계값을 초과하는지 확인
+                if width >= min_width and height >= min_height:
+                    person_detections.append((xmin, ymin, xmax, ymax))
+
+        print(f"Persons detected: {len(person_detections)}")
         return person_detections
 
     def draw_bounding_boxes(self, frame, tracks, tracked_faces):
+        print("Drawing bounding boxes...")
         for track_id, bbox in self.previous_tracks.items():
             if track_id in tracked_faces:
-                face_id = tracked_faces[track_id]
-                id_text = f"face_id: {face_id}"
-                cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
-                #cv2.putText(frame, id_text, (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                face_ids = tracked_faces[track_id]
+                # Face ID에서 personid만 추출
+                person_id = face_ids.split('_')[1]
+                cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 0, 255), 2)
+                cv2.putText(frame, f"person_ID : {person_id}", (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        for track_id, bbox in self.previous_tracks.items():
+            if track_id not in tracked_faces:
+                #얼굴 인식되지 않은 트랙에 대해서 파란색 박스를 유지
+                cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 0, 0), 2)
+                cv2.putText(frame, f"track_ID : {str(track_id)}", (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
     def recognize_faces(self, frame, frame_number, output_dir, known_faces, tracker, video_name, yolo_model, gender_model, age_model):
         original_shape = frame.shape[:2]
@@ -114,6 +131,12 @@ class FaceRecognizer:
             results.append([[xmin, ymin, xmax - xmin, ymax - ymin], 1.0, 0])
 
         tracks = tracker.update_tracks(results, frame=frame)
+
+        # 여기서 화면 경계를 벗어난 트랙 제거
+        for track_id in list(self.previous_tracks.keys()):
+            bbox = self.previous_tracks[track_id]
+            if bbox[0] < 0 or bbox[1] < 0 or bbox[2] > frame.shape[1] or bbox[3] > frame.shape[0]:
+                del self.previous_tracks[track_id]
 
         active_track_ids = {track.track_id for track in tracks if track.is_confirmed()}
         inactive_track_ids = set(self.tracked_faces.keys()) - active_track_ids
