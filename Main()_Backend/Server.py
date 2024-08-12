@@ -14,7 +14,6 @@ import concurrent.futures
 import math
 from moviepy.editor import VideoFileClip
 import json
-import time
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -31,15 +30,12 @@ def get_db_connection():
     )
 
 # 각 웹캠의 이미지가 저장될 폴더 경로 설정
-SAVE_FOLDER = 'realtime_saved_images'
-REALTIME_IMAGE_SAVE_PATH = 'realtime_uploaded_images'
+SAVE_FOLDER = 'saved_images'
 WEBCAM_FOLDERS = [f"webcam_{i}" for i in range(4)]
 
 # 폴더가 없으면 생성
 for folder in WEBCAM_FOLDERS:
     os.makedirs(os.path.join(SAVE_FOLDER, folder), exist_ok=True)
-
-realtime_flag = True #실시간 분석 ON/OFF
 
 # 파일 저장 경로 설정
 VIDEO_SAVE_PATH = 'uploaded_videos'
@@ -55,21 +51,17 @@ socketio = SocketIO(app)
 task_status = {}
 task_lock = threading.Lock()
 
-# 현재 작업 상태 키를 가져옴
 def get_task_key(user_id, video_name, filter_id):
     return f"{user_id}_{video_name}_{filter_id}"
 
-# 현재 작업 상태 키를 설정함
 def set_task_status(task_key, status):
     with task_lock:
         task_status[task_key] = {'status': status}
 
-# 현재 작업 상태를 가져옴
 def get_task_status(task_key):
     with task_lock:
         return task_status.get(task_key, {}).get('status')
 
-# 트래킹 작업 상태 관리
 class TrackingTaskManager:
     def __init__(self, missing_videos, callback):
         self.missing_videos = missing_videos
@@ -275,7 +267,7 @@ def get_pro_video_names_by_ids(pro_video_ids):
     finally:
         connection.close()
 
-# filter_id에 해당하는 pro_video_id 가져오기
+#filter_id에 해당하는 pro_video_id 가져오기
 def get_pro_video_ids_by_filter_id(filter_id):
     connection = get_db_connection()
     try:
@@ -297,7 +289,6 @@ def get_pro_video_ids_by_filter_id(filter_id):
     finally:
         connection.close()
 
-# video_name과 user_no, or_video_id 에 해당하는 filter_id 가져오기
 def get_filter_id_by_video_name_and_user_no_and_or_video_id(or_video_id, video_name, user_no):
     connection = get_db_connection()
     try:
@@ -340,7 +331,7 @@ def get_or_video_ids_by_pro_video_ids(pro_video_ids):
     finally:
         connection.close()
 
-# person_no 에 해당하는 필터 정보 가져오기
+#person_no 에 해당하는 필터 정보 가져오기
 def get_filter_id_by_person_no(person_no):
     connection = get_db_connection()
     try:
@@ -748,7 +739,6 @@ def save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id,
         connection.close()
     return saved_paths
 
-# 클립 처리 함수
 def clip_video(user_id, or_video_id, filter_id, video_names_for_clip_process, video_person_mapping, person_id):
     task_key = get_task_key(user_id, "clip", filter_id)
     if get_task_status(task_key) == 'running':
@@ -936,76 +926,6 @@ def process_save_face_info_without_image(video_name, user_id, or_video_id, filte
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-# 실시간 얼굴 처리 함수 (이미지 없을 때)
-def realtime_process_save_face_info_without_image(video_name, user_id, filter_id, start_time):
-    try:
-        cam_num = "1" #임시변수-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
-        # filter 정보 가져오기
-        filter_info = get_filter_info(filter_id)
-        if filter_info:
-            filter_gender = filter_info['filter_gender']
-            filter_age = filter_info['filter_age']
-            filter_color = filter_info['filter_color']
-            filter_clothes = filter_info['filter_clothes']
-        else:
-            print(f"No filter found for filter_id: {filter_id}")
-            return
-
-        # 'None' 값을 'none' 문자열로 변환
-        filter_gender = 'none' if filter_gender is None else filter_gender
-        filter_age = 'none' if filter_age is None else filter_age
-        filter_color = 'none' if filter_color is None else filter_color
-        filter_clothes = 'none' if filter_clothes is None else filter_clothes
-
-        # save_face_info6.py 스크립트 호출 (백그라운드 실행)
-        process = subprocess.Popen(
-            ["python", "Realtime_Save_info.py", str(user_id), filter_gender, filter_age, filter_color, filter_clothes], 
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        stdout, stderr = process.communicate()
-
-        if process.returncode != 0:
-            print(f"Error occurred: {stderr.decode('utf-8')}")
-        else:
-            #DB에 원본 저장 코드 필요
-            connection = get_db_connection()
-            filter_id = None
-            video_path = os.path.join('realtime_extracted_videos', user_id, "realtime.mp4") #Realtime_Main.py 끝나고, 이미지들을 동영상으로 저장한 디렉토리
-
-            with connection.cursor() as cursor:
-                # origin_video에 데이터 삽입
-                sql = """
-                    INSERT INTO origin_video (or_video_name, or_video_content, start_time, cam_num)
-                    VALUES (%s, %s, %s, %s)
-                """
-                cursor.execute(sql, (video_name, video_path, start_time, cam_num)) #filter_id랑 Cam_num도 같이 콜백을 받아야 할 듯
-                connection.commit()
-                connection.close()
-                response = jsonify({"status": "success", "message": "Data received and processed successfully"})
-                response.status_code = 200
-
-            or_video_id, or_video_name = get_or_video_id_by_path(video_path)
-            print(f"{or_video_name} Save_info.py 정보 추출 성공")
-            # 예시 메모장 파일 경로
-            info_file_path = f'./extracted_images/{user_id}/{or_video_name}_face_info.txt'
-
-            # 파싱한 person 정보
-            person_info = parse_info_file(info_file_path)
-
-            # DB에 저장
-            user_no = get_user_no(user_id)
-            if user_no is not None:
-                # 이미지 파일 경로 설정
-                saved_paths = save_to_db(person_info, or_video_id, user_id, user_no, filter_id)
-                print("person DB 저장")
-                print("Saved image paths:", saved_paths)
-
-            tracking_video(or_video_name, user_id, or_video_id, filter_id, saved_paths)
-            print("pro_video db 저장")
-            return response
-    except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
-
 # 얼굴 처리 함수 (이미지 있을 때)
 def process_save_face_info_with_image(video_name, user_id, or_video_id, filter_id, image_path, clip_flag=True):
     try:
@@ -1053,28 +973,6 @@ def process_save_face_info_with_image(video_name, user_id, or_video_id, filter_i
             
             tracking_video(video_name, user_id, or_video_id, filter_id, saved_paths)
             print("pro_video db 저장")
-
-    except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
-
-# 실시간 이미지 처리 함수 (필터링 이미지 없을 때)
-def realtime_process_video_without_images(video_name, user_id, filter_id, start_time):
-    try:
-        global realtime_flag
-        while(realtime_flag):
-            # Main_image2.py 스크립트 호출 (백그라운드 실행)
-            process = subprocess.Popen(
-                ["python", "Realtime_Main.py", video_name, str(user_id)], 
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
-            stdout, stderr = process.communicate()
-            time.sleep(1)  # 1초 지연
-
-        if process.returncode != 0:
-            print(f"Error occurred: {stderr.decode('utf-8')}")
-        else:
-            print("Realtime_Main.py 얼굴정보추출 성공")
-            realtime_process_save_face_info_without_image(video_name, user_id, filter_id, start_time)
 
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
@@ -1179,118 +1077,9 @@ def process_video_with_images(video_name, user_id, filter_id, image_path, clip_f
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
 
-# 비디오 분류후 처리 메서드 실행
-def process_video(video_name, user_id, filter_id, image_path, clip_flag):
-    video_base_name = os.path.splitext(video_name)[0]
-    if image_path:
-        process_video_with_images(video_base_name, user_id, filter_id, image_path, clip_flag)
-    else:
-        process_video_without_images(video_base_name, user_id, filter_id, clip_flag)
-
-#스레드 제한 및 작업상태 추적 메서드
-def process_videos(video_names, user_id, filter_id, image_path, clip_flag, video_filter_map):
-    processed_videos = set()  # 집합 대신 리스트로 변경
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {}
-        for video_name in video_names:
-            if video_name not in video_filter_map:
-                if video_name not in processed_videos:
-                    future = executor.submit(process_video, video_name, user_id, filter_id, image_path, clip_flag)
-                    futures[future] = video_name
-                    processed_videos.add(video_name)  # 집합 대신 리스트로 변경
-            else:
-                print(f"{video_name}_처리영상 존재")
-
-        for future in concurrent.futures.as_completed(futures):
-            video_name = futures[future]
-            try:
-                future.result()
-                print(f"{video_name} 처리 완료")
-            except Exception as e:
-                print(f"{video_name} 처리 중 에러 발생: {e}")
-
-# ffmpeg를 사용하여 비디오를 H.264 코덱으로 재인코딩.
-def reencode_video(input_path, output_path):
-    command = [
-        'ffmpeg', '-i', input_path, '-c:v', 'libx264', '-b:v', '2000k',
-        '-c:a', 'aac', '-b:a', '128k', output_path
-    ]
-    subprocess.run(command, check=True)
-
-# 0. 실시간 파일 업로드 엔드포인트 (Post)
-@app.route('/realtime_upload_file', methods=['POST'])
-def realtime_upload_file():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"status": "error", "message": "No JSON data received"}), 400
-        if isinstance(data, str):
-            return jsonify({"status": "error", "message": "Invalid JSON data format"}), 400
-
-        user_data = data.get('user_data', {})
-        user_id = user_data.get('user_id', '')
-
-        filter_data = data.get('filter_data', {})
-        age = filter_data.get('age', '')
-        gender = filter_data.get('gender', '')
-        color = filter_data.get('color', '')
-        type = filter_data.get('type', '')
-
-        clip_flag = request.form.get('clip_flag', 'true').lower() != 'false'
-
-        user_image_path = os.path.join(REALTIME_IMAGE_SAVE_PATH, str(user_id))
-        os.makedirs(user_image_path, exist_ok=True)
-
-        connection = get_db_connection()
-        filter_id = None
-
-        with connection.cursor() as cursor:
-            filter_sql = """
-                INSERT INTO filter (filter_gender, filter_age, filter_color, filter_clothes)
-                VALUES (%s, %s, %s, %s)
-            """
-            cursor.execute(filter_sql, (gender, age, color, type))
-            filter_id = cursor.lastrowid
-            print("filter DB create")
-            print(f"filter ID : {filter_id}") #filter_id를 클라이언트에게 콜백으로 돌려줘야 함
-
-            image_data = data.get('image_data', {})
-            image_name = image_data.get('image_name', '')
-            image_content_base64 = image_data.get('image_content', '')
-
-            image_path = None
-            if image_name and image_content_base64:
-                image_content = base64.b64decode(image_content_base64)
-                image_path = os.path.join(user_image_path, image_name).replace("\\", "/")
-
-                with open(image_path, 'wb') as image_file:
-                    image_file.write(image_content)
-                print(f"Image: {image_name}")
-                print(f"Image: {image_path}")
-
-            connection.commit()
-            connection.close()
-
-            response = jsonify({"status": "success", "message": "Data received and processed successfully"})
-
-            response.status_code = 200
-
-            return response
-
-    except ValueError as e:
-        print(f"A ValueError occurred: {str(e)}")
-        return jsonify({"status": "error", "message": f"A ValueError occurred: {str(e)}"}), 400
-    except KeyError as e:
-        print(f"A KeyError occurred: {str(e)}")
-        return jsonify({"status": "error", "message": f"A KeyError occurred: {str(e)}"}), 400
-    except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
-        return jsonify({"status": "error", "message": f"An unexpected error occurred: {str(e)}"}), 500
-
-# 0-1. 실시간 웹캠 이미지 전송 (Post)
+# 0. 실시간 웹캠 이미지 전송(Post)
 @app.route('/upload_image_<int:webcam_id>', methods=['POST'])
 def upload_image(webcam_id):
-    filter_id = "1" #임시변수
 
     data = request.get_json()
     # JSON 데이터가 제대로 수신되지 않았을 경우 확인
@@ -1319,53 +1108,303 @@ def upload_image(webcam_id):
     
 
     # 이미지 파일 저장
-    starttime = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     
     videoname = f"{user_id}_realtime"
-    filename = f"{starttime}_{videoname}.jpg"
+    filename = f"{timestamp}_{videoname}.jpg"
     folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id])
     filepath = os.path.join(folder_path, filename).replace("\\", "/")
     cv2.imwrite(filepath, img)
-
-    #실시간 분석 시작
-    global realtime_flag
-    realtime_flag = True
-
-    # 실시간 분석 처리 함수 (최근에 업로드한 filter_id를 토큰 형태로 가지고 있어야 함)
-    realtime_process_video_without_images(videoname, user_id, filter_id, starttime)
     
     print(f"Received and saved image from webcam {webcam_id} with shape: {img.shape} as {filename}")
     
     return jsonify({"message": "Image received and saved"}), 200
 
-# 0-2. 실시간 웹캠 이미지 전송 종료 (Post)
-@app.route('/realtime_upload_image_end_<int:webcam_id>', methods=['POST'])
-def realtime_upload_image_end(webcam_id):
-    data = request.get_json()
+# clip_video 출력을 위한 Person정보 입력받기
+@app.route('/get_Person_to_clip', methods=['GET'])
+def get_Person_to_clip():
+    user_id = request.args.get('user_id')
+    person_id = request.args.get('person_id')
+    filter_id = request.args.get('filter_id')
 
-    # JSON 데이터가 제대로 수신되지 않았을 경우 확인
-    if not data:
-        return jsonify({"status": "error", "message": "No JSON data received"}), 400
+    if not user_id:
+        return jsonify({"error": "User ID is required"}), 400
 
-    # 수신된 데이터가 문자열이 아닌 JSON 객체인지 확인
-    if isinstance(data, str):
-        return jsonify({"status": "error", "message": "Invalid JSON data format"}), 400
+    if not person_id:
+        return jsonify({"error": "Person ID is required"}), 400
+    
+    if not filter_id:
+        return jsonify({"error": "Filter_ID is required"}), 400
+    
+    print(f"clip_process_info : userid : {user_id} personid : {person_id} filterid : {filter_id}")
 
-    user_data = data.get('user_data', {})
-    user_id = user_data.get('user_id', '')
+    task_key = f'{user_id}_{person_id}_{filter_id}'
+    if get_task_status(task_key) == 'running':
+        print(f"Task {task_key} is already running")
+        return jsonify({"message": "Task is already running"}), 200
 
-    if webcam_id < 0 or webcam_id >= len(WEBCAM_FOLDERS):
-        return jsonify({"error": "Invalid webcam ID"}), 400
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    clip_info = []
+    try:
+        set_task_status(task_key, 'running')
+        print(f"Task {task_key} started")
+        user_no = get_user_no(user_id)
+        person_nos = get_person_nos(person_id, user_no, filter_id)
+        if not person_nos:
+            return jsonify({"error": "Person not found"}), 404
 
-    #실시간 분석 종료
-    global realtime_flag
-    realtime_flag = False
+        or_video_ids = [get_or_video_id_by_person_no(person_no) for person_no in person_nos]
+        video_names = [get_or_video_name(or_video_id) for or_video_id in or_video_ids]
 
-    print(f"Received and saved image from webcam {webcam_id} End")
+        video_names_for_clip_process = []
+        video_person_mapping = {}
+        for i, or_video_id in enumerate(or_video_ids):
+            video_names_for_clip_process.extend(get_vidoe_names_by_or_video_id_and_user_no_and_filter_id(or_video_id, user_no, filter_id))
+            video_person_mapping[video_names[i]] = person_nos[i]
 
-    return jsonify({"message": "Image received and saved"}), 200
+        lock_file_path = f'/tmp/{user_id}_{video_names[0]}_{person_id}.lock'
+        with FileLock(lock_file_path):
+            pro_videos = []
+            pro_video_names = []
+            pro_videos = get_pro_video_ids_by_filter_id(filter_id)
+            pro_video_names = get_pro_video_names_by_ids(pro_videos)
 
-# 1. 파일 업로드 엔드포인트 (Post)
+             # or_video_ids 리스트에 해당하는 pro_videos 필터링
+            pro_video_id_to_or_video_id = get_or_video_ids_by_pro_video_ids(pro_videos)
+            filtered_pro_videos = [pro_video for pro_video, or_video in pro_video_id_to_or_video_id.items() if or_video in or_video_ids]
+            filtered_pro_video_names = [name for name, pro_video in zip(pro_video_names, pro_videos) if pro_video in filtered_pro_videos]
+
+            missing_videos = []
+            for name in filtered_pro_video_names:
+                if not does_video_file_exist(user_id, name, person_id, filter_id):
+                    missing_videos.append(name)
+
+            clip_count = 0
+            for person_no in person_nos:
+                clip_sql = """
+                    SELECT COUNT(*) as count FROM clip WHERE person_no = %s
+                """
+                cursor.execute(clip_sql, (person_no,))
+                clip_count += cursor.fetchone()['count']
+
+            if missing_videos or clip_count == 0:
+                image_dir = f'./extracted_images/{user_id}/filter_{filter_id}/{video_names[0]}_clip/person_{person_id}/'
+                image_files = [f for f in os.listdir(image_dir) if f.endswith('.jpg') or f.endswith('.png')]
+                if not image_files:
+                    return jsonify({"error": "No image files found to create tracking video"}), 404
+
+                image_path = os.path.join(image_dir, image_files[0]).replace("\\", "/")
+
+                # Create a task manager instance
+                task_manager = TrackingTaskManager(missing_videos, lambda: clip_video(user_id, or_video_ids[0], filter_id, video_names_for_clip_process, video_person_mapping, person_id))
+
+                def tracking_callback(video_name, image_path):
+                    tracking_video_with_image_callback(video_name, user_id, or_video_ids[0], filter_id, [image_path], task_manager)
+
+                def create_tracking_videos():
+                    futures = []
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                        for name in missing_videos:
+                            # 각 비디오마다 올바른 이미지 경로를 가져오기
+                            image_dir = f'./extracted_images/{user_id}/filter_{filter_id}/{name}_clip/person_{person_id}/'
+
+                            if not os.path.exists(image_dir):
+                                print(f"Directory does not exist: {image_dir}")
+                                if name in video_names_for_clip_process:
+                                    video_names_for_clip_process.remove(name)
+                                if name in video_person_mapping:
+                                    del video_person_mapping[name]
+                                continue
+
+                            image_files = [f for f in os.listdir(image_dir) if f.endswith('.jpg') or f.endswith('.png')]
+                            if not image_files:
+                                print(f"No image files found for {name}")
+                                continue
+
+                            image_path = os.path.join(image_dir, image_files[0]).replace("\\", "/")
+                            futures.append(executor.submit(tracking_callback, name, image_path))
+
+                        # 모든 트래킹 작업이 완료될 때까지 기다립니다.
+                        for future in concurrent.futures.as_completed(futures):
+                            try:
+                                future.result()
+                            except Exception as e:
+                                print(f"Error occurred while creating tracking videos: {str(e)}")
+
+                # 트래킹 작업을 비동기로 시작합니다.
+                executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                future = executor.submit(create_tracking_videos)
+                
+
+                def check_future():
+                    if future.done():
+                        set_task_status(task_key, 'completed')
+                        future.result()  # 작업 완료를 기다림
+                    else:
+                        socketio.sleep(1)
+                        check_future()
+
+                socketio.start_background_task(check_future)
+                return jsonify({"message": "Tracking video is being created using available images"}), 200
+
+        for person_no in person_nos:
+            clip_sql = """
+                SELECT clip_video, clip_time FROM clip WHERE person_no = %s
+                """
+            cursor.execute(clip_sql, (person_no,))
+            clip_result = cursor.fetchall()
+            clip_info.extend([dict(row) for row in clip_result] if clip_result else [])
+
+    except Exception as e:
+        print(f"Exception: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        connection.close()
+        if get_task_status(task_key) == 'running':
+            set_task_status(task_key, 'failed')
+        else:
+            set_task_status(task_key, 'completed')
+        print(f"Task {task_key} completed or failed")
+        return jsonify({"clip_info": clip_info}), 200
+
+# ffmpeg를 사용하여 비디오를 H.264 코덱으로 재인코딩.
+def reencode_video(input_path, output_path):
+    command = [
+        'ffmpeg', '-i', input_path, '-c:v', 'libx264', '-b:v', '2000k',
+        '-c:a', 'aac', '-b:a', '128k', output_path
+    ]
+    subprocess.run(command, check=True)
+
+# Pro_video 동영상 스트리밍 엔드포인트
+@app.route('/stream_video', methods=['GET'])
+def stream_video():
+    user_id = request.args.get('user_id')
+    pro_video_name = request.args.get('pro_video_name')
+    print("user_id:", user_id)  # 디버깅 메시지 추가
+    print("pro_video_name:", pro_video_name)  # 디버깅 메시지 추가
+
+    video_path = get_video_path(user_id, pro_video_name)
+    if not video_path:
+        return jsonify({"error": "Invalid user_id or pro_video_name"}), 404
+
+    if not os.path.exists(video_path):
+        return jsonify({"error": "Video file not found"}), 404
+
+    reencoded_path = f"{video_path.rsplit('.', 1)[0]}_h264.mp4"
+    print(f"Original video path: {video_path}")  # 디버깅 메시지 추가
+    print(f"Reencoded video path: {reencoded_path}")  # 디버깅 메시지 추가
+
+    if not os.path.exists(reencoded_path):
+        try:
+            reencode_video(video_path, reencoded_path)
+            if not os.path.exists(reencoded_path):
+                print(f"Reencoded file does not exist after re-encoding: {reencoded_path}")
+                return jsonify({"error": "Failed to save re-encoded video"}), 500
+        except subprocess.CalledProcessError as e:
+            print(f"Error during re-encoding: {str(e)}")
+            return jsonify({"error": "Error during re-encoding"}), 500
+
+    def generate():
+        with open(reencoded_path, 'rb') as f:
+            while True:
+                chunk = f.read(1024*1024)
+                if not chunk:
+                    break
+                yield chunk
+
+    range_header = request.headers.get('Range', None)
+    if not range_header:
+        return Response(generate(), mimetype='video/mp4')
+
+    size = os.path.getsize(reencoded_path)
+    byte1, byte2 = 0, None
+
+    if '-' in range_header:
+        byte1, byte2 = range_header.replace('bytes=', '').split('-')
+    
+    byte1 = int(byte1)
+    if byte2:
+        byte2 = int(byte2)
+        length = byte2 - byte1 + 1
+    else:
+        length = size - byte1
+
+    def generate_range():
+        with open(reencoded_path, 'rb') as f:
+            f.seek(byte1)
+            remaining_length = length
+            while remaining_length > 0:
+                chunk = f.read(min(1024*1024, remaining_length))
+                if not chunk:
+                    break
+                remaining_length -= len(chunk)
+                yield chunk
+
+    rv = Response(generate_range(), 206, mimetype='video/mp4')
+    rv.headers.add('Content-Range', f'bytes {byte1}-{byte1 + length - 1}/{size}')
+    return rv
+
+# clip_video 동영상 스트리밍 엔드포인트
+@app.route('/stream_clipvideo', methods=['GET'])
+def stream_clipvideo():
+    video_path = request.args.get('clip_video')
+    if not video_path:
+        return jsonify({"error": "Invalid clip_video"}), 404
+
+    if not os.path.exists(video_path):
+        return jsonify({"error": "Video file not found"}), 404
+
+    reencoded_path = f"{video_path.rsplit('.', 1)[0]}_h264.mp4"
+    if not os.path.exists(reencoded_path):
+        try:
+            reencode_video(video_path, reencoded_path)
+        except subprocess.CalledProcessError as e:
+            print(f"Error during re-encoding: {str(e)}")
+            return jsonify({"error": "Error during re-encoding"}), 500
+
+    def generate():
+        with open(reencoded_path, 'rb') as f:
+            while True:
+                chunk = f.read(1024*1024)
+                if not chunk:
+                    break
+                yield chunk
+
+    range_header = request.headers.get('Range', None)
+    if not range_header:
+        return Response(generate(), mimetype='video/mp4')
+
+    size = os.path.getsize(reencoded_path)
+    byte1, byte2 = 0, None
+
+    if '-' in range_header:
+        byte1, byte2 = range_header.replace('bytes=', '').split('-')
+    
+    byte1 = int(byte1)
+    if byte2:
+        byte2 = int(byte2)
+        length = byte2 - byte1 + 1
+    else:
+        length = size - byte1
+
+    def generate_range():
+        with open(reencoded_path, 'rb') as f:
+            f.seek(byte1)
+            remaining_length = length
+            while remaining_length > 0:
+                chunk = f.read(min(1024*1024, remaining_length))
+                if not chunk:
+                    break
+                remaining_length -= len(chunk)
+                yield chunk
+
+    rv = Response(generate_range(), 206, mimetype='video/mp4')
+    rv.headers.add('Content-Range', f'bytes {byte1}-{byte1 + length - 1}/{size}')
+    return rv
+
+# 1. 파일 업로드 엔드포인트(Post)
 @app.route('/upload_file', methods=['POST'])
 def upload_file():
     try:
@@ -1506,7 +1545,35 @@ def upload_file():
         print(f"An unexpected error occurred: {str(e)}")
         return jsonify({"status": "error", "message": f"An unexpected error occurred: {str(e)}"}), 500
 
-# 2.회원가입 엔드포인트 (Post)
+def process_video(video_name, user_id, filter_id, image_path, clip_flag):
+    video_base_name = os.path.splitext(video_name)[0]
+    if image_path:
+        process_video_with_images(video_base_name, user_id, filter_id, image_path, clip_flag)
+    else:
+        process_video_without_images(video_base_name, user_id, filter_id, clip_flag)
+
+def process_videos(video_names, user_id, filter_id, image_path, clip_flag, video_filter_map):
+    processed_videos = set()  # 집합 대신 리스트로 변경
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {}
+        for video_name in video_names:
+            if video_name not in video_filter_map:
+                if video_name not in processed_videos:
+                    future = executor.submit(process_video, video_name, user_id, filter_id, image_path, clip_flag)
+                    futures[future] = video_name
+                    processed_videos.add(video_name)  # 집합 대신 리스트로 변경
+            else:
+                print(f"{video_name}_처리영상 존재")
+
+        for future in concurrent.futures.as_completed(futures):
+            video_name = futures[future]
+            try:
+                future.result()
+                print(f"{video_name} 처리 완료")
+            except Exception as e:
+                print(f"{video_name} 처리 중 에러 발생: {e}")
+
+# 2.회원가입 엔드포인트(Post)
 @app.route('/receive_data', methods=['POST'])
 def receive_data():
     data = request.get_json()
@@ -1567,7 +1634,7 @@ def receive_data():
         print("No data received or invalid format")  # 디버깅 메시지 추가
         return jsonify({"error": "No data received or invalid format"}), 400
     
-# 3. 로그인 엔드포인트 (Post)
+# 3. 로그인 엔드포인트(Post)
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -1668,7 +1735,7 @@ def login():
     else:
         return jsonify({"error": "No data received or invalid format"}), 400
     
-# 4.지도 주소 엔드포인트 (Post)
+# 4.지도 주소 엔드포인트(Post)
 @app.route('/upload_maps', methods=['POST'])
 def upload_map():
     try:
@@ -1730,7 +1797,7 @@ def upload_map():
         print(f"An error occurred: {str(e)}")
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-# 5.지도 마커 위치 엔드포인트 (Post)
+# 5.지도 마커 위치 엔드포인트(Post)
 @app.route('/upload_cams', methods=['POST'])
 def upload_cameras():
     try:
@@ -2050,282 +2117,7 @@ def map_cal():
         cursor.close()
         connection.close()
 
-# 10. Pro_video 동영상 스트리밍 엔드포인트 (GET)
-@app.route('/stream_video', methods=['GET'])
-def stream_video():
-    user_id = request.args.get('user_id')
-    pro_video_name = request.args.get('pro_video_name')
-    print("user_id:", user_id)  # 디버깅 메시지 추가
-    print("pro_video_name:", pro_video_name)  # 디버깅 메시지 추가
-
-    video_path = get_video_path(user_id, pro_video_name)
-    if not video_path:
-        return jsonify({"error": "Invalid user_id or pro_video_name"}), 404
-
-    if not os.path.exists(video_path):
-        return jsonify({"error": "Video file not found"}), 404
-
-    reencoded_path = f"{video_path.rsplit('.', 1)[0]}_h264.mp4"
-    print(f"Original video path: {video_path}")  # 디버깅 메시지 추가
-    print(f"Reencoded video path: {reencoded_path}")  # 디버깅 메시지 추가
-
-    if not os.path.exists(reencoded_path):
-        try:
-            reencode_video(video_path, reencoded_path)
-            if not os.path.exists(reencoded_path):
-                print(f"Reencoded file does not exist after re-encoding: {reencoded_path}")
-                return jsonify({"error": "Failed to save re-encoded video"}), 500
-        except subprocess.CalledProcessError as e:
-            print(f"Error during re-encoding: {str(e)}")
-            return jsonify({"error": "Error during re-encoding"}), 500
-
-    def generate():
-        with open(reencoded_path, 'rb') as f:
-            while True:
-                chunk = f.read(1024*1024)
-                if not chunk:
-                    break
-                yield chunk
-
-    range_header = request.headers.get('Range', None)
-    if not range_header:
-        return Response(generate(), mimetype='video/mp4')
-
-    size = os.path.getsize(reencoded_path)
-    byte1, byte2 = 0, None
-
-    if '-' in range_header:
-        byte1, byte2 = range_header.replace('bytes=', '').split('-')
-    
-    byte1 = int(byte1)
-    if byte2:
-        byte2 = int(byte2)
-        length = byte2 - byte1 + 1
-    else:
-        length = size - byte1
-
-    def generate_range():
-        with open(reencoded_path, 'rb') as f:
-            f.seek(byte1)
-            remaining_length = length
-            while remaining_length > 0:
-                chunk = f.read(min(1024*1024, remaining_length))
-                if not chunk:
-                    break
-                remaining_length -= len(chunk)
-                yield chunk
-
-    rv = Response(generate_range(), 206, mimetype='video/mp4')
-    rv.headers.add('Content-Range', f'bytes {byte1}-{byte1 + length - 1}/{size}')
-    return rv
-
-# 11. Clip 생성을 위한 전처리 엔드포인트 (GET)
-@app.route('/get_Person_to_clip', methods=['GET'])
-def get_Person_to_clip():
-    user_id = request.args.get('user_id')
-    person_id = request.args.get('person_id')
-    filter_id = request.args.get('filter_id')
-
-    if not user_id:
-        return jsonify({"error": "User ID is required"}), 400
-
-    if not person_id:
-        return jsonify({"error": "Person ID is required"}), 400
-    
-    if not filter_id:
-        return jsonify({"error": "Filter_ID is required"}), 400
-    
-    print(f"clip_process_info : userid : {user_id} personid : {person_id} filterid : {filter_id}")
-
-    task_key = f'{user_id}_{person_id}_{filter_id}'
-    if get_task_status(task_key) == 'running':
-        print(f"Task {task_key} is already running")
-        return jsonify({"message": "Task is already running"}), 200
-
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    clip_info = []
-    try:
-        set_task_status(task_key, 'running')
-        print(f"Task {task_key} started")
-        user_no = get_user_no(user_id)
-        person_nos = get_person_nos(person_id, user_no, filter_id)
-        if not person_nos:
-            return jsonify({"error": "Person not found"}), 404
-
-        or_video_ids = [get_or_video_id_by_person_no(person_no) for person_no in person_nos]
-        video_names = [get_or_video_name(or_video_id) for or_video_id in or_video_ids]
-
-        video_names_for_clip_process = []
-        video_person_mapping = {}
-        for i, or_video_id in enumerate(or_video_ids):
-            video_names_for_clip_process.extend(get_vidoe_names_by_or_video_id_and_user_no_and_filter_id(or_video_id, user_no, filter_id))
-            video_person_mapping[video_names[i]] = person_nos[i]
-
-        lock_file_path = f'/tmp/{user_id}_{video_names[0]}_{person_id}.lock'
-        with FileLock(lock_file_path):
-            pro_videos = []
-            pro_video_names = []
-            pro_videos = get_pro_video_ids_by_filter_id(filter_id)
-            pro_video_names = get_pro_video_names_by_ids(pro_videos)
-
-             # or_video_ids 리스트에 해당하는 pro_videos 필터링
-            pro_video_id_to_or_video_id = get_or_video_ids_by_pro_video_ids(pro_videos)
-            filtered_pro_videos = [pro_video for pro_video, or_video in pro_video_id_to_or_video_id.items() if or_video in or_video_ids]
-            filtered_pro_video_names = [name for name, pro_video in zip(pro_video_names, pro_videos) if pro_video in filtered_pro_videos]
-
-            missing_videos = []
-            for name in filtered_pro_video_names:
-                if not does_video_file_exist(user_id, name, person_id, filter_id):
-                    missing_videos.append(name)
-
-            clip_count = 0
-            for person_no in person_nos:
-                clip_sql = """
-                    SELECT COUNT(*) as count FROM clip WHERE person_no = %s
-                """
-                cursor.execute(clip_sql, (person_no,))
-                clip_count += cursor.fetchone()['count']
-
-            if missing_videos or clip_count == 0:
-                image_dir = f'./extracted_images/{user_id}/filter_{filter_id}/{video_names[0]}_clip/person_{person_id}/'
-                image_files = [f for f in os.listdir(image_dir) if f.endswith('.jpg') or f.endswith('.png')]
-                if not image_files:
-                    return jsonify({"error": "No image files found to create tracking video"}), 404
-
-                image_path = os.path.join(image_dir, image_files[0]).replace("\\", "/")
-
-                # Create a task manager instance
-                task_manager = TrackingTaskManager(missing_videos, lambda: clip_video(user_id, or_video_ids[0], filter_id, video_names_for_clip_process, video_person_mapping, person_id))
-
-                def tracking_callback(video_name, image_path):
-                    tracking_video_with_image_callback(video_name, user_id, or_video_ids[0], filter_id, [image_path], task_manager)
-
-                def create_tracking_videos():
-                    futures = []
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-                        for name in missing_videos:
-                            # 각 비디오마다 올바른 이미지 경로를 가져오기
-                            image_dir = f'./extracted_images/{user_id}/filter_{filter_id}/{name}_clip/person_{person_id}/'
-
-                            if not os.path.exists(image_dir):
-                                print(f"Directory does not exist: {image_dir}")
-                                if name in video_names_for_clip_process:
-                                    video_names_for_clip_process.remove(name)
-                                if name in video_person_mapping:
-                                    del video_person_mapping[name]
-                                continue
-
-                            image_files = [f for f in os.listdir(image_dir) if f.endswith('.jpg') or f.endswith('.png')]
-                            if not image_files:
-                                print(f"No image files found for {name}")
-                                continue
-
-                            image_path = os.path.join(image_dir, image_files[0]).replace("\\", "/")
-                            futures.append(executor.submit(tracking_callback, name, image_path))
-
-                        # 모든 트래킹 작업이 완료될 때까지 기다립니다.
-                        for future in concurrent.futures.as_completed(futures):
-                            try:
-                                future.result()
-                            except Exception as e:
-                                print(f"Error occurred while creating tracking videos: {str(e)}")
-
-                # 트래킹 작업을 비동기로 시작합니다.
-                executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-                future = executor.submit(create_tracking_videos)
-
-                def check_future():
-                    if future.done():
-                        set_task_status(task_key, 'completed')
-                        future.result()  # 작업 완료를 기다림
-                    else:
-                        socketio.sleep(1)
-                        check_future()
-
-                socketio.start_background_task(check_future)
-                return jsonify({"message": "Tracking video is being created using available images"}), 200
-
-        for person_no in person_nos:
-            clip_sql = """
-                SELECT clip_video, clip_time FROM clip WHERE person_no = %s
-                """
-            cursor.execute(clip_sql, (person_no,))
-            clip_result = cursor.fetchall()
-            clip_info.extend([dict(row) for row in clip_result] if clip_result else [])
-
-    except Exception as e:
-        print(f"Exception: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        connection.close()
-        if get_task_status(task_key) == 'running':
-            set_task_status(task_key, 'failed')
-        else:
-            set_task_status(task_key, 'completed')
-        print(f"Task {task_key} completed or failed")
-        return jsonify({"clip_info": clip_info}), 200
-
-# 12. Clip 동영상 스트리밍 엔드포인트 (GET)
-@app.route('/stream_clipvideo', methods=['GET'])
-def stream_clipvideo():
-    video_path = request.args.get('clip_video')
-    if not video_path:
-        return jsonify({"error": "Invalid clip_video"}), 404
-
-    if not os.path.exists(video_path):
-        return jsonify({"error": "Video file not found"}), 404
-
-    reencoded_path = f"{video_path.rsplit('.', 1)[0]}_h264.mp4"
-    if not os.path.exists(reencoded_path):
-        try:
-            reencode_video(video_path, reencoded_path)
-        except subprocess.CalledProcessError as e:
-            print(f"Error during re-encoding: {str(e)}")
-            return jsonify({"error": "Error during re-encoding"}), 500
-
-    def generate():
-        with open(reencoded_path, 'rb') as f:
-            while True:
-                chunk = f.read(1024*1024)
-                if not chunk:
-                    break
-                yield chunk
-
-    range_header = request.headers.get('Range', None)
-    if not range_header:
-        return Response(generate(), mimetype='video/mp4')
-
-    size = os.path.getsize(reencoded_path)
-    byte1, byte2 = 0, None
-
-    if '-' in range_header:
-        byte1, byte2 = range_header.replace('bytes=', '').split('-')
-    
-    byte1 = int(byte1)
-    if byte2:
-        byte2 = int(byte2)
-        length = byte2 - byte1 + 1
-    else:
-        length = size - byte1
-
-    def generate_range():
-        with open(reencoded_path, 'rb') as f:
-            f.seek(byte1)
-            remaining_length = length
-            while remaining_length > 0:
-                chunk = f.read(min(1024*1024, remaining_length))
-                if not chunk:
-                    break
-                remaining_length -= len(chunk)
-                yield chunk
-
-    rv = Response(generate_range(), 206, mimetype='video/mp4')
-    rv.headers.add('Content-Range', f'bytes {byte1}-{byte1 + length - 1}/{size}')
-    return rv
-
-# 13. 비디오 파일 길이 계산 엔드포인트 (Post)
+#10. 비디오 파일 길이 계산 엔드포인트(Post)
 @app.route('/upload_progresstime', methods=['POST'])
 def upload_file_with_progress_time():
     try:
@@ -2372,7 +2164,6 @@ def upload_file_with_progress_time():
     except Exception as e:
         print(f"오류 발생: {e}")
         return jsonify({"error": "파일 업로드 중 오류가 발생했습니다."}), 500
-
 if __name__ == '__main__':
     print("Starting server")  # 서버 시작 디버깅 메시지
     app.run(host="0.0.0.0", port=5002, debug=True)
