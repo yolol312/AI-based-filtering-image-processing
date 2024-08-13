@@ -57,7 +57,7 @@ class FaceRecognizer:
                 face = image[box[1]:box[3], box[0]:box[2]]
                 if face.size == 0:
                     continue
-                if face.shape[0] < 60 or face.shape[1] < 60:
+                if face.shape[0] < 40 or face.shape[1] < 40:
                     continue
                 face_tensor = torch.tensor(face).unsqueeze(0).permute(0, 3, 1, 2).float().to(self.device) / 255.0
                 face_resized = torch.nn.functional.interpolate(face_tensor, size=(160, 160), mode='bilinear')
@@ -97,7 +97,7 @@ class FaceRecognizer:
             print(f"Error: Person ID {person_id} not found in persons dictionary.")
 
 
-    def recognize_faces(self, frame, frame_number, output_dir, video_name, yolo_model, gender_model, age_model, color_model, clothes_model):
+    def recognize_faces(self, frame, frame_number, output_dir, video_name, yolo_model, gender_model, age_model, color_model, upclothes_model, downclothes_model):
         original_shape = frame.shape[:2]
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         forward_embeddings = self.extract_embeddings(frame_rgb)
@@ -153,15 +153,18 @@ class FaceRecognizer:
                         # Get color prediction
                         color = predict_color(frame, color_model, person_box)
 
-                        # Get clothes prediction
-                        clothes = predict_clothes(frame, clothes_model, person_box)
+                        # Get upclothes prediction
+                        upclothes = predict_upclothes(frame, upclothes_model, person_box)
+
+                        # Get downclothes prediction
+                        downclothes = predict_downclothes(frame, downclothes_model, person_box)
 
                         # Save face images only if they appear in at least 2 frames
-                        if self.face_frame_count[person_id] >= 3:
+                        if self.face_frame_count[person_id] >= 5:
                             output_folder = os.path.join(output_dir, f'{video_name}_face')
                             os.makedirs(output_folder, exist_ok=True)
                             face_image_resized = cv2.resize(face_image, (160, 160))
-                            output_path = os.path.join(output_folder, f'person_{person_id}_frame_{frame_number}_gender_{gender}_age_{self.age_predictions[person_id]["age"]}_color_{color}_clothes_{clothes}.jpg')
+                            output_path = os.path.join(output_folder, f'person_{person_id}_frame_{frame_number}_gender_{gender}_age_{self.age_predictions[person_id]["age"]}_color_{color}_upclothes_{upclothes}_downclothes_{downclothes}.jpg')
                             cv2.imwrite(output_path, cv2.cvtColor(face_image_resized, cv2.COLOR_RGB2BGR))
                             print(f"Saved image: {output_path}, person ID: {person_id}, detection probability: {prob}")
 
@@ -231,7 +234,7 @@ def predict_color(frame, color_model, bbox):
     # 예측이 없을 경우, 'unknown' 반환
     return "unknown"
 
-def predict_clothes(frame, clothes_model, bbox):
+def predict_upclothes(frame, upclothes_model, bbox):
     # 옷 종류 예측을 위한 관심 영역(ROI) 추출
     x1, y1, x2, y2 = bbox
     roi = frame[y1:y2, x1:x2]
@@ -239,15 +242,36 @@ def predict_clothes(frame, clothes_model, bbox):
         return "unknown"
     
     # 옷 종류 예측 수행
-    clothes_results = clothes_model.predict(source=[roi], save=False)[0]
+    upclothes_results = upclothes_model.predict(source=[roi], save=False)[0]
     
     # 옷 종류 이름 정의
-    clothes_names = {0: 'dress', 1: 'longsleevetop', 2: 'shortsleevetop', 3: 'vest', 4: 'shorts', 5: 'pants', 6: 'skirt'}
+    upclothes_names = {1: 'longsleevetop', 2: 'shortsleevetop', 3: 'sleeveless'}
     
-    if clothes_results.boxes.data.shape[0] > 0:
+    if upclothes_results.boxes.data.shape[0] > 0:
         # 예측된 옷 종류 클래스 추출
-        clothes_class = int(clothes_results.boxes.data[0][5])
-        return clothes_names.get(clothes_class, "unknown")
+        upclothes_class = int(upclothes_results.boxes.data[0][5])
+        return upclothes_names.get(upclothes_class, "unknown")
+    
+    # 예측이 없을 경우, 'unknown' 반환
+    return "unknown"
+
+def predict_downclothes(frame, downclothes_model, bbox):
+    # 옷 종류 예측을 위한 관심 영역(ROI) 추출
+    x1, y1, x2, y2 = bbox
+    roi = frame[y1:y2, x1:x2]
+    if roi.size == 0:  # ROI가 비어있다면 'unknown' 반환
+        return "unknown"
+    
+    # 옷 종류 예측 수행
+    downclothes_results = downclothes_model.predict(source=[roi], save=False)[0]
+    
+    # 옷 종류 이름 정의
+    downclothes_names = {0: 'shorts', 1: 'pants', 2: 'skirt'}
+    
+    if downclothes_results.boxes.data.shape[0] > 0:
+        # 예측된 옷 종류 클래스 추출
+        downclothes_class = int(downclothes_results.boxes.data[0][5])
+        return downclothes_names.get(downclothes_class, "unknown")
     
     # 예측이 없을 경우, 'unknown' 반환
     return "unknown"
@@ -259,7 +283,7 @@ def load_yolo_model(model_path, device):
     return model
 
 # global_persons 정보를 .txt 파일로 저장
-def save_global_persons(user_no, output_dir, face_frame_count, min_frames = 3):
+def save_global_persons(user_no, output_dir, face_frame_count, min_frames = 5):
     global global_persons_by_user
     output_path = os.path.join(output_dir, f"{user_no}_global_persons.txt")
     
@@ -328,14 +352,14 @@ def load_global_persons(user_no, output_dir):
     else:
         global_persons_by_user[user_no] = {}  # 파일이 없으면 빈 딕셔너리로 초기화
 
-def process_video(video_path, output_dir, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, user_no, global_persons={}):
+def process_video(video_path, output_dir, yolo_model_path, gender_model_path, age_model_path, color_model_path, upclothes_model_path, downclothes_model_path, user_no, global_persons={}):
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     recognizer = FaceRecognizer(user_no)
     recognizer.persons = global_persons
 
     v_cap = cv2.VideoCapture(video_path)
     frame_rate = int(v_cap.get(cv2.CAP_PROP_FPS))
-    frame_interval = 12 # 8프레임마다 처리
+    frame_interval = 6 # 8프레임마다 처리
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cpu_device = torch.device('cpu')
@@ -356,8 +380,8 @@ def process_video(video_path, output_dir, yolo_model_path, gender_model_path, ag
     age_model.eval()
 
     color_model = load_yolo_model(color_model_path, device)
-    clothes_model = load_yolo_model(clothes_model_path, device) 
-
+    upclothes_model = load_yolo_model(upclothes_model_path, device) 
+    downclothes_model = load_yolo_model(downclothes_model_path, device)
     frame_number = 0
 
     while True:
@@ -367,13 +391,13 @@ def process_video(video_path, output_dir, yolo_model_path, gender_model_path, ag
         frame_number += 1
 
         # 1280x720보다 크면 리사이즈
-        if frame.shape[1] > 1280 or frame.shape[0] > 720:
-            frame = cv2.resize(frame, (1280, 720))
+        #if frame.shape[1] > 1280 or frame.shape[0] > 720:
+            #frame = cv2.resize(frame, (1280, 720))
 
         if frame_number % frame_interval != 0:
             continue
 
-        frame = recognizer.recognize_faces(frame, frame_number, output_dir, video_name, yolo_model, gender_model, age_model, color_model, clothes_model)
+        frame = recognizer.recognize_faces(frame, frame_number, output_dir, video_name, yolo_model, gender_model, age_model, color_model, upclothes_model, downclothes_model)
 
         #cv2.imshow('Processed Frame', frame)
 
@@ -389,7 +413,7 @@ def process_video(video_path, output_dir, yolo_model_path, gender_model_path, ag
     return recognizer.persons, recognizer.face_frame_count  # face_frame_count도 반환
 
 # process_videos 함수에서 save_global_persons 호출 시 recognizer.face_frame_count를 올바르게 전달합니다.
-def process_videos(video_paths, output_dir, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, user_no, target_video_name):
+def process_videos(video_paths, output_dir, yolo_model_path, gender_model_path, age_model_path, color_model_path, upclothes_model_path, downclothes_model_path, user_no, target_video_name):
     global global_persons_by_user
     
     if user_no not in global_persons_by_user:
@@ -409,7 +433,7 @@ def process_videos(video_paths, output_dir, yolo_model_path, gender_model_path, 
         recognizer = FaceRecognizer(user_no)
         recognizer.persons = global_persons_by_user[user_no]
         global_persons_by_user[user_no], final_face_frame_count = process_video(
-            video_path, output_dir, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, user_no, global_persons_by_user[user_no]
+            video_path, output_dir, yolo_model_path, gender_model_path, age_model_path, color_model_path, upclothes_model_path, downclothes_model_path, user_no, global_persons_by_user[user_no]
         )
 
     # 처리된 global_persons를 파일에 저장 (recognizer가 None이 아닌지 확인하고 face_frame_count를 함께 전달)
@@ -422,8 +446,8 @@ def process_videos(video_paths, output_dir, yolo_model_path, gender_model_path, 
 
 if __name__ == "__main__":
     try:
-        video_name = sys.argv[1]
-        user_no = sys.argv[2]
+        video_name = sys.argv[1]# "W16-2" #sys.argv[1]
+        user_no = sys.argv[2]# "WS_TEST2" #sys.argv[2]
         video_directory = f"./uploaded_videos/{user_no}/"
         video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.endswith(('.mp4', '.avi', '.mov'))]
         output_directory = f"./extracted_images/{user_no}/"
@@ -433,9 +457,10 @@ if __name__ == "__main__":
         gender_model_path = './models/gender_model.pt' #서양인 모델
         age_model_path = './models/age_best.pth'
         color_model_path = './models/color_model.pt'
-        clothes_model_path = './models/clothes_class.pt'
+        upclothes_model_path = './models/upclothes_model.pt'
+        downclothes_model_path = './models/downclothes_model.pt'
         
-        process_videos(video_paths, output_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, clothes_model_path, user_no, video_name)
+        process_videos(video_paths, output_directory, yolo_model_path, gender_model_path, age_model_path, color_model_path, upclothes_model_path, downclothes_model_path, user_no, video_name)
         
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
