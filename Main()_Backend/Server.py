@@ -615,21 +615,18 @@ def parse_info_file(file_path):
             person_id_match = re.search(r'(\d+):', person)
             gender_match = re.search(r'gender: (\w+)', person)
             age_match = re.search(r'age: (\w+)', person)
-            color_match = re.search(r'color: (\w+)', person)
             upclothes_match = re.search(r'upclothes: (\w+)', person)
             downclothes_match = re.search(r'downclothes: (\w+)', person)
             if person_id_match and gender_match and age_match:
                 person_id = person_id_match.group(1)
                 gender = gender_match.group(1)
                 age = age_match.group(1)
-                color = color_match.group(1)
                 upclothes = upclothes_match.group(1)
                 downclothes = downclothes_match.group(1)
                 person_info.append({
                     'person_id': person_id,
                     'gender': gender,
                     'age': age,
-                    'color': color,
                     'upclothes': upclothes,
                     'downclothes': downclothes
                 })
@@ -669,15 +666,14 @@ def save_to_db(person_info, or_video_id, user_id, user_no, filter_id):
                 # 상대 경로로 저장
                 face_image_relative_path = os.path.join(person_image_dir, face_name).replace("\\", "/")
                 sql = """
-                    INSERT INTO person (person_id, or_video_id, person_age, person_gender, person_color, person_upclothes, person_downclothes, person_face, person_origin_face, user_no, filter_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO person (person_id, or_video_id, person_age, person_gender, person_upclothes, person_downclothes, person_face, person_origin_face, user_no, filter_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 cursor.execute(sql, (
                     person_id,
                     or_video_id,
                     person['age'],
                     person['gender'],
-                    person['color'],  # person_color
                     person['upclothes'],  # person_upclothes
                     person['downclothes'],
                     '',  # person_face
@@ -727,8 +723,8 @@ def save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id,
                 # 상대 경로로 저장
                 face_image_relative_path = os.path.join(person_image_dir, face_name).replace("\\", "/")
                 sql = """
-                    INSERT INTO person (person_id, or_video_id, person_age, person_gender, person_color, person_upclothes, person_downclothes, person_face, person_origin_face, user_no, filter_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO person (person_id, or_video_id, person_age, person_gender, person_upclothes, person_downclothes, person_face, person_origin_face, user_no, filter_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 # image_path 앞에 './'를 추가하고, 역슬래시를 슬래시로 변경
                 image_path = f"./{image_path}".replace("\\", "/")
@@ -737,7 +733,6 @@ def save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id,
                     or_video_id,
                     person['age'],
                     person['gender'],
-                    person['color'],  # person_color
                     person['upclothes'],  # person_upclothes
                     person['downclothes'],
                     image_path,  # person_face
@@ -896,7 +891,6 @@ def process_save_face_info_without_image(video_name, user_id, or_video_id, filte
         if filter_info:
             filter_gender = filter_info['filter_gender']
             filter_age = filter_info['filter_age']
-            filter_color = filter_info['filter_color']
             filter_upclothes = filter_info['filter_upclothes']
             filter_downclothes = filter_info['filter_downclothes']
         else:
@@ -906,13 +900,12 @@ def process_save_face_info_without_image(video_name, user_id, or_video_id, filte
         # 'None' 값을 'none' 문자열로 변환
         filter_gender = 'none' if filter_gender is None else filter_gender
         filter_age = 'none' if filter_age is None else filter_age
-        filter_color = 'none' if filter_color is None else filter_color
         filter_upclothes = 'none' if filter_upclothes is None else filter_upclothes
         filter_downclothes = 'none' if filter_downclothes is None else filter_downclothes
 
         # save_face_info6.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
-            ["python", "Save_info.py", video_name, str(user_id), str(filter_id), filter_gender, filter_age, filter_color, filter_upclothes, filter_downclothes], 
+            ["python", "Save_info.py", video_name, str(user_id), str(filter_id), filter_gender, filter_age, filter_upclothes, filter_downclothes], 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = process.communicate()
@@ -952,7 +945,6 @@ def realtime_process_save_face_info_without_image(video_name, user_id, filter_id
         if filter_info:
             filter_gender = filter_info['filter_gender']
             filter_age = filter_info['filter_age']
-            filter_color = filter_info['filter_color']
             filter_upclothes = filter_info['filter_upclothes']
             filter_downclothes = filter_info['filter_downclothes']
         else:
@@ -962,13 +954,12 @@ def realtime_process_save_face_info_without_image(video_name, user_id, filter_id
         # 'None' 값을 'none' 문자열로 변환
         filter_gender = 'none' if filter_gender is None else filter_gender
         filter_age = 'none' if filter_age is None else filter_age
-        filter_color = 'none' if filter_color is None else filter_color
         filter_upclothes = 'none' if filter_upclothes is None else filter_upclothes
         filter_downclothes = 'none' if filter_downclothes is None else filter_downclothes
 
         # save_face_info6.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
-            ["python", "Realtime_Save_info.py", str(user_id), filter_gender, filter_age, filter_color, filter_upclothes, filter_downclothes], 
+            ["python", "Realtime_Save_info.py", str(user_id), filter_gender, filter_age, filter_upclothes, filter_downclothes], 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = process.communicate()
@@ -1023,7 +1014,6 @@ def process_save_face_info_with_image(video_name, user_id, or_video_id, filter_i
         if filter_info:
             filter_gender = filter_info['filter_gender']
             filter_age = filter_info['filter_age']
-            filter_color = filter_info['filter_color']
             filter_upclothes = filter_info['filter_upclothes']
             filter_downclothes = filter_info['filter_downclothes']
         else:
@@ -1033,13 +1023,12 @@ def process_save_face_info_with_image(video_name, user_id, or_video_id, filter_i
         # 'None' 값을 'none' 문자열로 변환
         filter_gender = 'none' if filter_gender is None else filter_gender
         filter_age = 'none' if filter_age is None else filter_age
-        filter_color = 'none' if filter_color is None else filter_color
         filter_upclothes = 'none' if filter_upclothes is None else filter_upclothes
         filter_downclothes = 'none' if filter_downclothes is None else filter_downclothes
 
         # save_face_info6.py 스크립트 호출 (백그라운드 실행)
         process = subprocess.Popen(
-            ["python", "Save_info_with_image.py", video_name, str(user_id), str(filter_id), filter_gender, filter_age, filter_color, filter_upclothes, filter_downclothes, image_path], 
+            ["python", "Save_info_with_image.py", video_name, str(user_id), str(filter_id), filter_gender, filter_age, filter_upclothes, filter_downclothes, image_path], 
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = process.communicate()
@@ -1244,8 +1233,8 @@ def realtime_upload_file():
         filter_data = data.get('filter_data', {})
         age = filter_data.get('age', '')
         gender = filter_data.get('gender', '')
-        color = filter_data.get('color', '')
-        type = filter_data.get('type', '')
+        uptype = filter_data.get('uptype', '')
+        downtype = filter_data.get('downtype', '')
 
         clip_flag = request.form.get('clip_flag', 'true').lower() != 'false'
 
@@ -1257,10 +1246,10 @@ def realtime_upload_file():
 
         with connection.cursor() as cursor:
             filter_sql = """
-                INSERT INTO filter (filter_gender, filter_age, filter_color, filter_upclothes, filter_downclothes)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO filter (filter_gender, filter_age, filter_upclothes, filter_downclothes)
+                VALUES (%s, %s, %s, %s)
             """
-            cursor.execute(filter_sql, (gender, age, color, type))
+            cursor.execute(filter_sql, (gender, age, uptype, downtype))
             filter_id = cursor.lastrowid
             print("filter DB create")
             print(f"filter ID : {filter_id}") #filter_id를 클라이언트에게 콜백으로 돌려줘야 함
@@ -1392,7 +1381,6 @@ def upload_file():
         filter_data = data.get('filter_data', {})
         age = filter_data.get('age', '')
         gender = filter_data.get('gender', '')
-        color = filter_data.get('color', '')
         uptype = filter_data.get('uptype', '')
         downtype = filter_data.get('downtype', '')
 
@@ -1412,10 +1400,10 @@ def upload_file():
         filter_id = None
         with connection.cursor() as cursor:
             filter_sql = """
-                INSERT INTO filter (filter_gender, filter_age, filter_color, filter_upclothes, filter_downclothes, bundle_name)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO filter (filter_gender, filter_age, filter_upclothes, filter_downclothes, bundle_name)
+                VALUES (%s, %s, %s, %s, %s)
             """
-            cursor.execute(filter_sql, (gender, age, color, uptype, downtype, bundle))
+            cursor.execute(filter_sql, (gender, age, uptype, downtype, bundle))
             filter_id = cursor.lastrowid
             print("filter DB create")
             print(f"filter ID : {filter_id}")
@@ -1469,7 +1457,7 @@ def upload_file():
                     valid_filter_ids = []
                     for fid in filter_ids:
                         filter_info = get_filter_info(fid)                                                                                                  #filter_info['filter_downclothes'] == downtype and
-                        if filter_info and filter_info['filter_gender'] == gender and filter_info['filter_age'] == age and filter_info['filter_color'] == color and filter_info['filter_upclothes'] == uptype and filter_info['filter_downclothes'] == downtype and filter_info['bundle_name'] == bundle:
+                        if filter_info and filter_info['filter_gender'] == gender and filter_info['filter_age'] == age and filter_info['filter_upclothes'] == uptype and filter_info['filter_downclothes'] == downtype and filter_info['bundle_name'] == bundle:
                             valid_filter_ids.append(fid)
                     if valid_filter_ids:
                         video_filter_map[video_name] = valid_filter_ids
@@ -1620,11 +1608,10 @@ def login():
                         c.cam_name, 
                         c.cam_latitude, 
                         c.cam_longitude, 
-                        pv.pro_video_name, 
+                        p.person_id,
                         f.filter_id,
                         f.filter_gender,
                         f.filter_age,
-                        f.filter_color,
                         f.filter_upclothes,
                         f.filter_downclothes,
                         f.bundle_name
@@ -1635,11 +1622,11 @@ def login():
                     LEFT JOIN 
                         origin_video orv ON c.cam_num = orv.cam_num
                     LEFT JOIN 
-                        processed_video pv ON pv.or_video_id = orv.or_video_id
+                        person p ON p.or_video_id = orv.or_video_id
                     LEFT JOIN 
-                        filter f ON f.filter_id = pv.filter_id
+                        filter f ON f.filter_id = p.filter_id
                     WHERE 
-                        m.user_no = %s
+                        m.user_no = %s;
                 """
                 cursor.execute(map_camera_provideo_sql, (user_no,))
                 map_camera_provideo_result = cursor.fetchall()
@@ -1889,11 +1876,10 @@ def update_pro_video():
                 c.cam_name, 
                 c.cam_latitude, 
                 c.cam_longitude, 
-                pv.pro_video_name, 
+                p.person_id,
                 f.filter_id,
                 f.filter_gender,
                 f.filter_age,
-                f.filter_color,
                 f.filter_upclothes,
                 f.filter_downclothes,
                 f.bundle_name
@@ -1904,11 +1890,11 @@ def update_pro_video():
             LEFT JOIN 
                 origin_video orv ON c.cam_num = orv.cam_num
             LEFT JOIN 
-                processed_video pv ON pv.or_video_id = orv.or_video_id
+                person p ON p.or_video_id = orv.or_video_id
             LEFT JOIN 
-                filter f ON f.filter_id = pv.filter_id
+                filter f ON f.filter_id = p.filter_id
             WHERE 
-                m.user_no = %s
+                m.user_no = %s;
         """
         cursor.execute(map_camera_provideo_sql, (user_no,))
         map_camera_provideo_result = cursor.fetchall()
@@ -1929,49 +1915,46 @@ def update_pro_video():
 @app.route('/select_person', methods=['GET'])
 def select_person():
     filter_id = request.args.get('filter_id')
-    pro_video_name = request.args.get('pro_video_name')
+    print(filter_id)
 
     if not filter_id:
         return jsonify({"error": "Filter Id is required"}), 400
-    
-    if not pro_video_name:
-        return jsonify({"error": "Processed Video Name is required"}), 400
 
     connection = get_db_connection()
     cursor = connection.cursor()
 
     try:
-        # pro_video_name을 기반으로 pro_video_id를 찾기
-        pro_video_id_sql = "SELECT pro_video_id FROM processed_video as pv WHERE pv.pro_video_name = %s AND pv.filter_id = %s"
-        cursor.execute(pro_video_id_sql, (pro_video_name, filter_id))
-        pro_video_id_result = cursor.fetchone()
-
-        if pro_video_id_result is None:
-            return jsonify({"error": "User not found"}), 404
-
-        pro_video_id = pro_video_id_result['pro_video_id']
-
         # filter_id를 기반으로 Person을 가져오기
-        # Person 정보 가져오기
         person_sql = """
             SELECT 
                 p.person_id, 
                 p.person_age, 
                 p.person_gender, 
-                p.person_color, 
                 p.person_upclothes, 
-                p.person_downclothes,
-                p.person_face
+                p.person_downclothes, 
+                p.person_origin_face
             FROM person p
             JOIN processed_video pv ON p.or_video_id = pv.or_video_id
             WHERE 
-                p.filter_id = %s AND
-                pv.pro_video_id = %s
+                p.filter_id = %s
             """
-        cursor.execute(person_sql, (filter_id, pro_video_id))
+        cursor.execute(person_sql, (filter_id,))
         person_result = cursor.fetchall()
 
-        person_dict = [dict(row, filter_id=filter_id) for row in person_result] if person_result else []
+        person_dict = []
+        for row in person_result:
+            person_info = dict(row)
+            face_path = person_info['person_origin_face']
+
+            # 이미지 파일을 Base64로 인코딩
+            if os.path.exists(face_path):
+                with open(face_path, "rb") as image_file:
+                    encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+                    person_info['person_origin_face'] = encoded_string
+            else:
+                person_info['person_origin_face'] = None  # 파일이 없을 경우 None으로 설정
+
+            person_dict.append(person_info)
 
         return jsonify({"person_info": person_dict}), 200
 
@@ -2387,6 +2370,141 @@ def upload_file_with_progress_time():
     except Exception as e:
         print(f"오류 발생: {e}")
         return jsonify({"error": "파일 업로드 중 오류가 발생했습니다."}), 500
+ 
+# 14. 맵 업데이트 엔드포인트 (Post)
+@app.route('/update_cams', methods=['POST'])
+def update_cams():
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"error": "잘못된 요청입니다."}), 400
+
+        user_id = data.get('userId')
+        address = data.get('address')
+        markers = data.get('markers')
+
+        print(f"user_id : {user_id}, address : {address}, markers : {markers}")
+
+        user_no = get_user_no(user_id)
+        
+        if not user_id:
+            return jsonify({"error": "사용자 ID가 누락되었습니다."}), 400
+
+        if not markers or not isinstance(markers, list):
+            return jsonify({"error": "마커 데이터가 올바르지 않습니다."}), 400
+
+        # 데이터베이스 연결
+        connection = get_db_connection()
+
+        with connection.cursor() as cursor:
+            # 현재 데이터베이스에 있는 카메라 목록 조회
+            sql_select = """
+            SELECT cam_name
+            FROM camera
+            WHERE map_num = (
+                SELECT map_num
+                FROM map
+                WHERE address = %s AND user_no = %s
+            )
+            """
+            cursor.execute(sql_select, (address, user_no))
+            db_cam_names = [row['cam_name'] for row in cursor.fetchall()]
+
+            # 마커의 cam_name들 추출
+            marker_cam_names = [marker['name'] for marker in markers]
+
+            # UPDATE 또는 INSERT 실행
+            for marker in markers:
+                cam_name = marker.get('name')
+                cam_latitude = marker.get('latitude')
+                cam_longitude = marker.get('longitude')
+
+                if cam_name in db_cam_names:
+                    # camera 테이블 업데이트
+                    sql_update = """
+                    UPDATE camera
+                    SET cam_latitude = %s, cam_longitude = %s
+                    WHERE cam_name = %s
+                    AND map_num = (
+                        SELECT map_num
+                        FROM map
+                        WHERE address = %s AND user_no = %s
+                    )
+                    """
+                    cursor.execute(sql_update, (cam_latitude, cam_longitude, cam_name, address, user_no))
+                else:
+                    # camera 테이블 삽입
+                    sql_insert = """
+                    INSERT INTO camera (cam_name, cam_latitude, cam_longitude, map_num)
+                    VALUES (%s, %s, %s, (
+                        SELECT map_num
+                        FROM map
+                        WHERE address = %s AND user_no = %s
+                    ))
+                    """
+                    cursor.execute(sql_insert, (cam_name, cam_latitude, cam_longitude, address, user_no))
+
+            # DELETE 실행
+            for db_cam_name in db_cam_names:
+                if db_cam_name not in marker_cam_names:
+                    sql_delete = """
+                    DELETE FROM camera
+                    WHERE cam_name = %s
+                    AND map_num = (
+                        SELECT map_num
+                        FROM map
+                        WHERE address = %s AND user_no = %s
+                    )
+                    """
+                    cursor.execute(sql_delete, (db_cam_name, address, user_no))
+
+            # 데이터베이스 변경사항 커밋
+            connection.commit()
+
+            # map, ProVideo, bundle 정보 가져오기
+            map_camera_sql = """
+                SELECT 
+                    m.address, 
+                    m.map_latitude, 
+                    m.map_longitude, 
+                    c.cam_name, 
+                    c.cam_latitude, 
+                    c.cam_longitude, 
+                    p.person_id,
+                    f.filter_id,
+                    f.filter_gender,
+                    f.filter_age,
+                    f.filter_upclothes,
+                    f.filter_downclothes,
+                    f.bundle_name
+                FROM 
+                    map m
+                JOIN 
+                    camera c ON m.map_num = c.map_num
+                LEFT JOIN 
+                    origin_video orv ON c.cam_num = orv.cam_num
+                LEFT JOIN 
+                    person p ON p.or_video_id = orv.or_video_id
+                LEFT JOIN 
+                    filter f ON f.filter_id = p.filter_id
+                WHERE 
+                    m.user_no = %s;
+            """
+            cursor.execute(map_camera_sql, (user_no,))
+            map_camera_result = cursor.fetchall()
+
+            map_camera_dict = [dict(row) for row in map_camera_result] if map_camera_result else []
+
+            return jsonify({"map_camera_info": map_camera_dict}), 200
+
+    except Exception as e:
+        print(f"오류 발생: {e}")
+        return jsonify({"error": "마커 데이터를 처리하는 중 오류가 발생했습니다."}), 500
+    
+    finally:
+        cursor.close()
+        connection.close()
 
 if __name__ == '__main__':
     print("Starting server")  # 서버 시작 디버깅 메시지
