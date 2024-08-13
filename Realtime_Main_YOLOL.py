@@ -12,6 +12,112 @@ from ultralytics import YOLO
 from deep_sort_realtime.deepsort_tracker import DeepSort
 import threading
 from collections import defaultdict, Counter
+import torch
+from torchvision import transforms
+import torch.nn as nn
+from PIL import Image
+
+# Activation Function
+class SiLU(nn.Module):
+    def forward(self, x):
+        return x * torch.sigmoid(x)
+
+# Convolutional Layer
+class Conv(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, bias=False):
+        super(Conv, self).__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=bias)
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.act = SiLU()
+
+    def forward(self, x):
+        return self.act(self.bn(self.conv(x)))
+
+# Bottleneck Layer
+class Bottleneck(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(Bottleneck, self).__init__()
+        hidden_channels = out_channels // 2
+        self.cv1 = Conv(in_channels, hidden_channels, kernel_size=1, stride=1, padding=0)
+        self.cv2 = Conv(hidden_channels, out_channels, kernel_size=3, stride=1, padding=1)
+
+    def forward(self, x):
+        return x + self.cv2(self.cv1(x))
+
+# C2f Layer
+class C2f(nn.Module):
+    def __init__(self, in_channels, out_channels, num_bottlenecks):
+        super(C2f, self).__init__()
+        hidden_channels = out_channels // 2
+        self.cv1 = Conv(in_channels, hidden_channels, kernel_size=1, stride=1, padding=0)
+        self.cv2 = Conv(hidden_channels * (num_bottlenecks + 1), out_channels, kernel_size=1, stride=1, padding=0)
+        self.bottlenecks = nn.ModuleList([Bottleneck(hidden_channels, hidden_channels) for _ in range(num_bottlenecks)])
+
+    def forward(self, x):
+        y = [self.cv1(x)]
+        for bottleneck in self.bottlenecks:
+            y.append(bottleneck(y[-1]))
+        return self.cv2(torch.cat(y, 1))
+
+# SPPF Layer
+class SPPF(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(SPPF, self).__init__()
+        hidden_channels = in_channels // 2
+        self.cv1 = Conv(in_channels, hidden_channels, kernel_size=1, stride=1, padding=0)
+        self.pool = nn.MaxPool2d(kernel_size=5, stride=1, padding=2)
+        self.cv2 = Conv(hidden_channels * 4, out_channels, kernel_size=1, stride=1, padding=0)
+
+    def forward(self, x):
+        x = self.cv1(x)
+        y1 = self.pool(x)
+        y2 = self.pool(y1)
+        y3 = self.pool(y2)
+        return self.cv2(torch.cat([x, y1, y2, y3], 1))
+
+# Detect Layer for Single Class and Single Scale Prediction
+class Detect(nn.Module):
+    def __init__(self, num_classes=1):
+        super(Detect, self).__init__()
+        self.num_classes = num_classes
+        self.conv = nn.Sequential(
+            Conv(1280, 640, 3, 1, 1),
+            Conv(640, 320, 3, 1, 1),
+            nn.Conv2d(320, num_classes + 5, 1, 1)
+        )
+
+    def forward(self, x):
+        return self.conv(x)
+
+# YOLOv8x Model for Single Class and Single Scale Prediction
+class YOLOL(nn.Module):
+    def __init__(self, num_classes=1):
+        super(YOLOL, self).__init__()
+        self.conv1 = Conv(3, 80, 3, 2, 1)  # P1/2
+        self.conv2 = Conv(80, 160, 3, 2, 1)  # P2/4
+        self.c2f1 = C2f(160, 160, 3)  # num_bottlenecks: 3
+        self.conv3 = Conv(160, 320, 3, 2, 1)  # P3/8
+        self.c2f2 = C2f(320, 320, 6)  # num_bottlenecks: 6
+        self.conv4 = Conv(320, 640, 3, 2, 1)  # P4/16
+        self.c2f3 = C2f(640, 640, 6)  # num_bottlenecks: 6
+        self.conv5 = Conv(640, 1280, 3, 2, 1)  # P5/32
+        self.c2f4 = C2f(1280, 1280, 3)  # num_bottlenecks: 3
+        self.sppf = SPPF(1280, 1280)  # P5/32
+        self.detect = Detect(num_classes)  # Detection layer
+
+    def forward(self, x):
+        x1 = self.conv1(x)
+        x2 = self.conv2(x1)
+        x3 = self.c2f1(x2)
+        x4 = self.conv3(x3)
+        x5 = self.c2f2(x4)
+        x6 = self.conv4(x5)
+        x7 = self.c2f3(x6)
+        x8 = self.conv5(x7)
+        x9 = self.c2f4(x8)
+        x10 = self.sppf(x9)
+        outputs = self.detect(x10)
+        return outputs
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -28,14 +134,23 @@ starttime = ""
 #예측 중인지 확인하는 변수
 process_playing = False
 
+# 커스텀 모델 불러오기
+def load_model(model_path, device):
+    model = YOLOL(num_classes=1)
+    model.load_state_dict(torch.load(model_path))
+    model.to(device)
+    model.eval()
+    return model
+
 # YOLO 모델 및 DeepSort 초기화
-yolo_model = YOLO('models/yololv8_model_new_best_only_person_focalloss_AdamW_120_Copy.pt')  # YOLO 모델 경로를 적절히 설정하세요
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model_path = 'models/yololv8_model_new_best_only_person_focalloss_AdamW_120_Copy.pt'  # 모델 경로를 입력하세요
+yolo_model = load_model(model_path, device)  # YOLO 모델 경로를 적절히 설정하세요
 tracker = DeepSort(max_age=30, n_init=3, nn_budget=60)
 
 # 폴더가 없으면 생성
 for folder in WEBCAM_FOLDERS:
     os.makedirs(os.path.join(SAVE_FOLDER, folder), exist_ok=True)
-
 
 # folder_path에 있는 이미지 파일 수를 계산하는 함수
 def count_images_in_folder(folder_path):
@@ -243,27 +358,60 @@ def get_db_connection():
         cursorclass=pymysql.cursors.DictCursor
     )
 
-def detect_persons(frame, yolo_model):
+def detect_objects(model, image, device):
     print("Detecting persons...")
-    yolo_results = yolo_model.predict(source=[frame], save=False)[0]
-    person_detections = [
-        (int(data[0]), int(data[1]), int(data[2]), int(data[3]))
-        for data in yolo_results.boxes.data.tolist()
-        if float(data[4]) >= 0.85 and int(data[5]) == 0
-    ]
-    print(f"Persons detected: {len(person_detections)}")
+
+    # 이미지가 numpy 배열인 경우 PIL 이미지로 변환
+    if isinstance(image, np.ndarray):
+        image = Image.fromarray(image)
+
+    transform = transforms.Compose([
+        transforms.Resize((640, 640)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
+    ])
+    
+    input_image = transform(image).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        outputs = model(input_image)
+    
+    person_detections = []
+    outputs = outputs.cpu().squeeze().permute(1, 2, 0)
+    grid_size = outputs.shape[0]
+
+    for y in range(grid_size):
+        for x in range(grid_size):
+            confidence = outputs[y, x, 4].item()
+
+            # 신뢰도가 일정 수준 이상일 때만 바운딩 박스를 추출
+            if confidence >= 0.5:
+                    bbox = outputs[y, x, :4].numpy()
+                    cx, cy, w, h = bbox
+                    cx *= image.width
+                    w *= image.width
+                    cy *= image.height
+                    h *= image.height
+                    # 그리드 좌표를 이미지 스케일로 변환
+                    x_min = int(cx - w / 2)
+                    y_min = int(cy - h / 2)
+                    x_max = int(cx + w / 2)
+                    y_max = int(cy + h / 2)
+                    
+                    person_detections.append((x_min, y_min, x_max, y_max))
+
     return person_detections
 
 # 백그라운드에서 실행할 함수 정의
 def run_background_process(user_id, filepath, processed_filepath):
     global process_playing
     process = subprocess.Popen(
-        ["python", "Realtime_Prediction.py", user_id, filepath, processed_filepath],
+        ["python", "Realtime_Prediction_modified.py", user_id, filepath, processed_filepath],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     stdout, stderr = process.communicate()
     process_playing = False
-    
+
     if process.returncode != 0:
         print(f"Error occurred: {stderr.decode()}")
 
@@ -380,7 +528,8 @@ def upload_image(webcam_id):
 
     print(f"Current count value: {image_count}")
 
-    global process_playing
+    global process_playing, yolo_model, device
+
     if process_playing == False:
         print("Threading Start")
 
@@ -393,8 +542,9 @@ def upload_image(webcam_id):
 
 
     if image_count % 5 == 0 and image_count % 120 != 0 and image_count != 0:
+        print("Process Start")
         # 실시간 트래킹 처리
-        person_detections = detect_persons(img, yolo_model)
+        person_detections = detect_objects(yolo_model, img, device)
         
         results = []
         for (xmin, ymin, xmax, ymax) in person_detections:

@@ -2,6 +2,7 @@ import cv2
 import os
 import sys
 import torch
+import torch.nn as nn
 import numpy as np
 from facenet_pytorch import MTCNN, InceptionResnetV1
 from ultralytics import YOLO
@@ -10,6 +11,161 @@ from age_model import ResNetAgeModel, device, test_transform
 from gender_model import ResNetGenderModel, device, test_transform
 from PIL import Image
 from collections import Counter
+from torchvision import transforms
+from PIL import Image
+
+# Activation Function
+class SiLU(nn.Module):
+    def forward(self, x):
+        return x * torch.sigmoid(x)
+
+# Convolutional Layer
+class Conv(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, bias=False):
+        super(Conv, self).__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=bias)
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.act = SiLU()
+
+    def forward(self, x):
+        return self.act(self.bn(self.conv(x)))
+
+# Bottleneck Layer
+class Bottleneck(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(Bottleneck, self).__init__()
+        hidden_channels = out_channels // 2
+        self.cv1 = Conv(in_channels, hidden_channels, kernel_size=1, stride=1, padding=0)
+        self.cv2 = Conv(hidden_channels, out_channels, kernel_size=3, stride=1, padding=1)
+
+    def forward(self, x):
+        return x + self.cv2(self.cv1(x))
+
+# C2f Layer
+class C2f(nn.Module):
+    def __init__(self, in_channels, out_channels, num_bottlenecks):
+        super(C2f, self).__init__()
+        hidden_channels = out_channels // 2
+        self.cv1 = Conv(in_channels, hidden_channels, kernel_size=1, stride=1, padding=0)
+        self.cv2 = Conv(hidden_channels * (num_bottlenecks + 1), out_channels, kernel_size=1, stride=1, padding=0)
+        self.bottlenecks = nn.ModuleList([Bottleneck(hidden_channels, hidden_channels) for _ in range(num_bottlenecks)])
+
+    def forward(self, x):
+        y = [self.cv1(x)]
+        for bottleneck in self.bottlenecks:
+            y.append(bottleneck(y[-1]))
+        return self.cv2(torch.cat(y, 1))
+
+# SPPF Layer
+class SPPF(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(SPPF, self).__init__()
+        hidden_channels = in_channels // 2
+        self.cv1 = Conv(in_channels, hidden_channels, kernel_size=1, stride=1, padding=0)
+        self.pool = nn.MaxPool2d(kernel_size=5, stride=1, padding=2)
+        self.cv2 = Conv(hidden_channels * 4, out_channels, kernel_size=1, stride=1, padding=0)
+
+    def forward(self, x):
+        x = self.cv1(x)
+        y1 = self.pool(x)
+        y2 = self.pool(y1)
+        y3 = self.pool(y2)
+        return self.cv2(torch.cat([x, y1, y2, y3], 1))
+
+# Detect Layer for Single Class and Single Scale Prediction
+class Detect(nn.Module):
+    def __init__(self, num_classes=1):
+        super(Detect, self).__init__()
+        self.num_classes = num_classes
+        self.conv = nn.Sequential(
+            Conv(1280, 640, 3, 1, 1),
+            Conv(640, 320, 3, 1, 1),
+            nn.Conv2d(320, num_classes + 5, 1, 1)
+        )
+
+    def forward(self, x):
+        return self.conv(x)
+
+# YOLOv8x Model for Single Class and Single Scale Prediction
+class YOLOv8x(nn.Module):
+    def __init__(self, num_classes=1):
+        super(YOLOv8x, self).__init__()
+        self.conv1 = Conv(3, 80, 3, 2, 1)  # P1/2
+        self.conv2 = Conv(80, 160, 3, 2, 1)  # P2/4
+        self.c2f1 = C2f(160, 160, 3)  # num_bottlenecks: 3
+        self.conv3 = Conv(160, 320, 3, 2, 1)  # P3/8
+        self.c2f2 = C2f(320, 320, 6)  # num_bottlenecks: 6
+        self.conv4 = Conv(320, 640, 3, 2, 1)  # P4/16
+        self.c2f3 = C2f(640, 640, 6)  # num_bottlenecks: 6
+        self.conv5 = Conv(640, 1280, 3, 2, 1)  # P5/32
+        self.c2f4 = C2f(1280, 1280, 3)  # num_bottlenecks: 3
+        self.sppf = SPPF(1280, 1280)  # P5/32
+        self.detect = Detect(num_classes)  # Detection layer
+
+    def forward(self, x):
+        x1 = self.conv1(x)
+        x2 = self.conv2(x1)
+        x3 = self.c2f1(x2)
+        x4 = self.conv3(x3)
+        x5 = self.c2f2(x4)
+        x6 = self.conv4(x5)
+        x7 = self.c2f3(x6)
+        x8 = self.conv5(x7)
+        x9 = self.c2f4(x8)
+        x10 = self.sppf(x9)
+        outputs = self.detect(x10)
+        return outputs
+
+def load_model(model_path, device):
+    model = YOLOv8x(num_classes=1)
+    model.load_state_dict(torch.load(model_path))
+    model.to(device)
+    model.eval()
+    return model
+
+def detect_objects(model, image, device):
+    print("Detecting persons...")
+
+    # 이미지가 numpy 배열인 경우 PIL 이미지로 변환
+    if isinstance(image, np.ndarray):
+        image = Image.fromarray(image)
+
+    transform = transforms.Compose([
+        transforms.Resize((640, 640)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
+    ])
+    
+    input_image = transform(image).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        outputs = model(input_image)
+    
+    person_detections = []
+    outputs = outputs.cpu().squeeze().permute(1, 2, 0)
+    grid_size = outputs.shape[0]
+
+    for y in range(grid_size):
+        for x in range(grid_size):
+            confidence = outputs[y, x, 4].item()
+
+            # 신뢰도가 일정 수준 이상일 때만 바운딩 박스를 추출
+            if confidence >= 0.5:
+                    bbox = outputs[y, x, :4].numpy()
+                    cx, cy, w, h = bbox
+                    cx *= image.width
+                    w *= image.width
+                    cy *= image.height
+                    h *= image.height
+                    # 그리드 좌표를 이미지 스케일로 변환
+                    x_min = int(cx - w / 2)
+                    y_min = int(cy - h / 2)
+                    x_max = int(cx + w / 2)
+                    y_max = int(cy + h / 2)
+                    
+                    person_detections.append((x_min, y_min, x_max, y_max))
+
+    return person_detections
 
 class FaceRecognizer:
     def __init__(self, device=None):
@@ -76,7 +232,7 @@ class FaceRecognizer:
         original_shape = frame.shape[:2]
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         forward_embeddings = self.extract_embeddings(frame_rgb)
-        person_detections = self.detect_persons(frame, yolo_model)
+        person_detections = detect_objects(yolo_model, frame, self.device)
 
         results = []
         for (xmin, ymin, xmax, ymax) in person_detections:
@@ -244,7 +400,7 @@ def process_images(image_dir, yolo_model_path, gender_model_path, age_model_path
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    yolo_model = load_yolo_model(yolo_model_path, device)
+    yolo_model = load_model(yolo_model_path, device)
     gender_model = YOLO(gender_model_path, device)
     age_model = ResNetAgeModel(num_classes=4)
     age_model.load_state_dict(torch.load(age_model_path))
@@ -297,7 +453,7 @@ if __name__ == "__main__":
     try:
         user_no = "admin"
         image_directory = f"./realtime_saved_images/webcam_0/"  # webcam_0 부분을 카메라 이름으로 바꿀 예정
-        yolo_model_path = './models/yolov8x.pt'
+        yolo_model_path = './models/yololv8_model_new_best_only_person_focalloss_AdamW_120_Copy.pt'
         gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_model.pth'
         #color_model_path = './models/color_model.pt'
