@@ -670,7 +670,7 @@ def save_to_db(person_info, or_video_id, user_id, user_no, filter_id):
                 face_image_relative_path = os.path.join(person_image_dir, face_name).replace("\\", "/")
                 sql = """
                     INSERT INTO person (person_id, or_video_id, person_age, person_gender, person_color, person_upclothes, person_downclothes, person_face, person_origin_face, user_no, filter_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 cursor.execute(sql, (
                     person_id,
@@ -727,8 +727,8 @@ def save_to_db_with_image(person_info, or_video_id, user_id, user_no, filter_id,
                 # 상대 경로로 저장
                 face_image_relative_path = os.path.join(person_image_dir, face_name).replace("\\", "/")
                 sql = """
-                    INSERT INTO person (person_id, or_video_id, person_age, person_gender, person_color, person_upclothes, person_downclothes person_face, person_origin_face, user_no, filter_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO person (person_id, or_video_id, person_age, person_gender, person_color, person_upclothes, person_downclothes, person_face, person_origin_face, user_no, filter_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 # image_path 앞에 './'를 추가하고, 역슬래시를 슬래시로 변경
                 image_path = f"./{image_path}".replace("\\", "/")
@@ -1415,7 +1415,7 @@ def upload_file():
                 INSERT INTO filter (filter_gender, filter_age, filter_color, filter_upclothes, filter_downclothes, bundle_name)
                 VALUES (%s, %s, %s, %s, %s, %s)
             """
-            cursor.execute(filter_sql, (gender, age, color, type, bundle))
+            cursor.execute(filter_sql, (gender, age, color, uptype, downtype, bundle))
             filter_id = cursor.lastrowid
             print("filter DB create")
             print(f"filter ID : {filter_id}")
