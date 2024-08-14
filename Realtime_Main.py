@@ -19,8 +19,6 @@ CORS(app)
 
 # 각 웹캠의 이미지가 저장될 폴더 경로 설정
 SAVE_FOLDER = 'realtime_saved_images'
-REALTIME_IMAGE_SAVE_PATH = 'realtime_uploaded_images'
-WEBCAM_FOLDERS = [f"webcam_{i}" for i in range(4)]
 
 # 처리 시작 시간
 starttime = ""
@@ -29,13 +27,8 @@ starttime = ""
 process_playing = False
 
 # YOLO 모델 및 DeepSort 초기화
-yolo_model = YOLO('models/yololv8_model_new_best_only_person_focalloss_AdamW_120_Copy.pt')  # YOLO 모델 경로를 적절히 설정하세요
+yolo_model = YOLO('models/yolov8x.pt')  # YOLO 모델 경로를 적절히 설정하세요
 tracker = DeepSort(max_age=30, n_init=3, nn_budget=60)
-
-# 폴더가 없으면 생성
-for folder in WEBCAM_FOLDERS:
-    os.makedirs(os.path.join(SAVE_FOLDER, folder), exist_ok=True)
-
 
 # folder_path에 있는 이미지 파일 수를 계산하는 함수
 def count_images_in_folder(folder_path):
@@ -67,17 +60,17 @@ def get_user_no(user_id):
         connection.close()
 
 # user_id로 user_no 정보 가져오기
-def get_cam_num(user_id, cam_name):
+def get_cam_num(user_no, cam_name):
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
-            sql = "SELECT cam_num FROM user WHERE user_id = %s AND cam_name = %s"
-            cursor.execute(sql, (user_id, cam_name))
+            sql = "SELECT cam_num FROM camera WHERE user_no = %s AND cam_name = %s"
+            cursor.execute(sql, (user_no, cam_name))
             result = cursor.fetchone()
             if result:
                 return result['cam_num']
             else:
-                print(f"No record found for user_id: {user_id}")
+                print(f"No record found for user_id: {user_no}")
                 return None
     except pymysql.MySQLError as e:
         print(f"MySQL error occurred: {str(e)}")
@@ -99,7 +92,7 @@ def convert_filename_to_datetime(filename):
     return formatted_datetime
 
 # 영상 및 log 결과 DB에 저장
-def save_video_to_db(user_no, cam_num, start_time, origin_video_path, combined_video_path, txt_file_path):
+def save_video_to_db(user_no, cam_num, start_time, origin_video_path, processed_video_path, output_txt_path, processed_log_txt_path, cropped_images_path):
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
@@ -113,27 +106,31 @@ def save_video_to_db(user_no, cam_num, start_time, origin_video_path, combined_v
             or_video_id = cursor.lastrowid  # 방금 삽입된 원본 비디오의 ID
 
             # 처리된 비디오를 processed_video 테이블에 저장
-            processed_video_name = os.path.basename(combined_video_path)
+            processed_video_name = os.path.basename(processed_video_path)
             insert_processed_video_query = """
                 INSERT INTO processed_video (or_video_id, pro_video_name, pro_video_content, user_no)
                 VALUES (%s, %s, %s, %s)
             """
-            cursor.execute(insert_processed_video_query, (or_video_id, processed_video_name, combined_video_path, user_no))
+            cursor.execute(insert_processed_video_query, (or_video_id, processed_video_name, processed_video_path, user_no))
 
             # txt 파일 내용을 log 테이블에 저장
-            with open(txt_file_path, 'r') as txt_file:
+            with open(output_txt_path, 'r') as txt_file:
                 for line in txt_file:
                     log_data = line.strip()
                     insert_log_query = """
-                        INSERT INTO log (log_data, user_no, cam_num)
-                        VALUES (%s, %s, %s)
+                        INSERT INTO log (log_data, user_no, cam_num, or_video_id)
+                        VALUES (%s, %s, %s, %s)
                     """
-                    cursor.execute(insert_log_query, (log_data, user_no, cam_num))
+                    cursor.execute(insert_log_query, (log_data, user_no, cam_num, or_video_id))
 
             # 변경 사항 커밋
             connection.commit()
 
             print("Videos and logs have been saved to the database.")
+
+            os.remove(output_txt_path)
+            os.remove(processed_log_txt_path)
+            os.remove(cropped_images_path)
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -224,13 +221,19 @@ def get_last_line_from_txt(txt_file):
         return "Predicting..."
 
     with open(txt_file, 'rb') as f:
-        f.seek(0, os.SEEK_END)  # 파일 끝으로 포인터 이동
+        f.seek(0, os.SEEK_END)
+        if f.tell() == 0:  # 파일이 비어 있는 경우
+            return "Predicting..."
+
+        # 파일이 비어 있지 않은 경우
+        f.seek(-1, os.SEEK_END)
         while f.tell() > 0:
-            f.seek(-2, os.SEEK_CUR)  # 역순으로 읽기
+            f.seek(-2, os.SEEK_CUR)
             if f.read(1) == b'\n':
                 break
-        last_line = f.readline().decode()
 
+        last_line = f.readline().decode()
+    
     return last_line.strip()
 
 # 데이터베이스 연결 함수
@@ -255,15 +258,15 @@ def detect_persons(frame, yolo_model):
     return person_detections
 
 # 백그라운드에서 실행할 함수 정의
-def run_background_process(user_id, filepath, processed_filepath):
+def run_background_process(user_id, user_cam_folder_path, origin_filepath):
     global process_playing
     process = subprocess.Popen(
-        ["python", "Realtime_Prediction.py", user_id, filepath, processed_filepath],
+        ["python", "Realtime_Prediction.py", user_id, user_cam_folder_path, origin_filepath],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     stdout, stderr = process.communicate()
     process_playing = False
-    
+
     if process.returncode != 0:
         print(f"Error occurred: {stderr.decode()}")
 
@@ -283,9 +286,6 @@ def realtime_upload_file():
 
         user_id = "admin"
         cam_name = "우송대"
-
-        user_image_path = os.path.join(REALTIME_IMAGE_SAVE_PATH, str(user_id))
-        os.makedirs(user_image_path, exist_ok=True)
 
         connection = get_db_connection()
 
@@ -324,8 +324,8 @@ def realtime_upload_file():
         return jsonify({"status": "error", "message": f"An unexpected error occurred: {str(e)}"}), 500
 
 # 0-1. 실시간 웹캠 이미지 전송 (Post)
-@app.route('/realtime_upload_image_<int:webcam_id>', methods=['POST'])
-def upload_image(webcam_id):
+@app.route('/realtime_upload_image', methods=['POST'])
+def upload_image():
     # json_data를 가져와서 JSON 형식으로 파싱
     #json_data = request.form.get('json_data')
     
@@ -340,14 +340,11 @@ def upload_image(webcam_id):
     
     # user_id와 filter_id 추출
     #user_id = data.get('user_id')
-
+    #cam_name = data.get('cam_name')
     user_id = "admin"
-    
+    cam_name = "우송대"
     #if not user_id:
         #return jsonify({"error": "User ID is required"}), 400
-
-    if webcam_id < 0 or webcam_id >= len(WEBCAM_FOLDERS):
-        return jsonify({"error": "Invalid webcam ID"}), 400
 
     # 이미지 파일 수신
     if 'image' not in request.files:
@@ -360,39 +357,52 @@ def upload_image(webcam_id):
     if img is None:
         return jsonify({"error": "Image decoding failed"}), 500
 
+    # 결과 이미지를 Base64로 인코딩하여 클라이언트에 반환
+    _, buffer = cv2.imencode('.jpg', img)
+    image_base64 = base64.b64encode(buffer).decode('utf-8')
+
     # 이미지 파일 저장
     starttime = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     filename = f"{starttime}_{file.filename}.jpg"
-    #folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id], user_id)
-    folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id])
-    processed_folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id], "processed_images")
-    filepath = os.path.join(folder_path, filename).replace("\\", "/")
+    user_folder_path = os.path.join(SAVE_FOLDER, user_id)
+    user_cam_folder_path = os.path.join(user_folder_path, cam_name)
+    origin_folder_path = os.path.join(user_cam_folder_path, "origin_images")
+    processed_folder_path = os.path.join(user_cam_folder_path, "processed_images")
+    cropped_images_path = os.path.join(user_cam_folder_path, "cropped_images")
+    output_txt_path = os.path.join(user_cam_folder_path, "predictions.txt")
+
+    origin_filepath = os.path.join(origin_folder_path, filename).replace("\\", "/")
     processed_filepath = os.path.join(processed_folder_path, filename).replace("\\", "/")
 
     # 디렉토리가 존재하지 않을 경우 생성
-    os.makedirs(folder_path, exist_ok=True)
+    os.makedirs(user_folder_path, exist_ok=True)
+    os.makedirs(user_cam_folder_path, exist_ok=True)
+    os.makedirs(origin_folder_path, exist_ok=True)
     os.makedirs(processed_folder_path, exist_ok=True)
+    os.makedirs(cropped_images_path, exist_ok=True)
 
-    cv2.imwrite(filepath, img)
+    cv2.imwrite(origin_filepath, img)
 
     # 이미지 파일 수 계산
-    image_count = count_images_in_folder(folder_path)
+    image_count = count_images_in_folder(origin_folder_path)
 
     print(f"Current count value: {image_count}")
 
-    global process_playing
+    global process_playing, yolo_model, device
+
     if process_playing == False:
         print("Threading Start")
 
         # 새로운 스레드를 생성하여 백그라운드에서 스크립트를 실행
         threading.Thread(
             target=run_background_process,
-            args=(user_id, filepath, processed_filepath)
+            args=(user_id, user_cam_folder_path, origin_filepath)
         ).start()
         process_playing = True
 
 
-    if image_count % 5 == 0 and image_count % 120 != 0 and image_count != 0:
+    if image_count % 5 == 0 and image_count % 150 != 0:
+        print("Process Start")
         # 실시간 트래킹 처리
         person_detections = detect_persons(img, yolo_model)
         
@@ -417,22 +427,19 @@ def upload_image(webcam_id):
         image_base64 = base64.b64encode(buffer).decode('utf-8')
 
         # 예측된 데이터 읽기
-        output_txt_path = f"./realtime_saved_images/webcam_0/{user_id}/predictions.txt"
         predictions = get_last_line_from_txt(output_txt_path)
 
-        print(f"Received and processed image from webcam {webcam_id} with shape: {img.shape} as {filename} / predictions : {predictions}")
+        print(f"Received and processed image from cam {cam_name} with shape: {img.shape} as {filename} / predictions : {predictions}")
         return jsonify({"message": "Image received and processed", "frame": image_base64, "person_data" : predictions}), 200
 
-    if image_count % 120 == 0 and image_count != 0:
+    if image_count % 150 == 0 and image_count != 0:
         # 결과 이미지를 Base64로 인코딩하여 클라이언트에 반환
         _, buffer = cv2.imencode('.jpg', img)
         image_base64 = base64.b64encode(buffer).decode('utf-8')
         
-        cropped_images_dir = f"./realtime_saved_images/webcam_0/{user_id}/cropped_images/"
-        output_txt_path = f"./realtime_saved_images/webcam_0/{user_id}/predictions.txt"
-        summary_predictions, person_image = summarize_tracking_data(output_txt_path, cropped_images_dir)
+        summary_predictions, person_image = summarize_tracking_data(output_txt_path, cropped_images_path)
 
-        print(f"Received and processed image from webcam {webcam_id} with shape: {img.shape} as {filename} / Summary Predictions : {summary_predictions}")
+        print(f"Received and processed image from cam {cam_name} with shape: {img.shape} as {filename} / Summary Predictions : {summary_predictions}")
         return jsonify({"message": "Image received and processed", "frame": image_base64, "person_data": summary_predictions, "person_image" : person_image}), 200
 
     # 결과 이미지를 Base64로 인코딩하여 클라이언트에 반환
@@ -440,15 +447,14 @@ def upload_image(webcam_id):
     image_base64 = base64.b64encode(buffer).decode('utf-8')
 
     # 예측된 데이터 읽기
-    output_txt_path = f"./realtime_saved_images/webcam_0/{user_id}/predictions.txt"
     predictions = get_last_line_from_txt(output_txt_path)
 
-    print(f"Received and return image from webcam {webcam_id} with shape: {img.shape} as {filename} / predictions : {predictions}")
-    return jsonify({"message": "Image received and processed", "frame": image_base64, "person_data" : predictions}), 200
+    print(f"Received and return image from cam {cam_name} with shape: {img.shape} as {filename} / predictions : {predictions}")
+    return jsonify({"message": "Image received and processed", "person_data" : predictions}), 200
 
 # 0-2. 실시간 웹캠 이미지 전송 종료 (Post)
-@app.route('/realtime_upload_image_end_<int:webcam_id>', methods=['POST'])
-def realtime_upload_image_end(webcam_id):
+@app.route('/realtime_upload_image_end', methods=['POST'])
+def realtime_upload_image_end():
     data = request.get_json()
 
     # JSON 데이터가 제대로 수신되지 않았을 경우 확인
@@ -464,25 +470,33 @@ def realtime_upload_image_end(webcam_id):
     #cam_name = user_data.get('cam_name', '')
     cam_name = "우송대"
 
-    if webcam_id < 0 or webcam_id >= len(WEBCAM_FOLDERS):
-        return jsonify({"error": "Invalid webcam ID"}), 400
+    user_no = get_user_no(user_id)
+    cam_num = get_cam_num(user_id, cam_name)
+    start_time = convert_filename_to_datetime(or_image_files[0])
 
     # Processed 이미지 폴더 경로 설정
-    processed_folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id], "processed_images")
-    origin_folder_path = os.path.join(SAVE_FOLDER, WEBCAM_FOLDERS[webcam_id])
-    output_txt_path = f"./realtime_saved_images/webcam_0/{user_id}/predictions.txt"
-    processed_log_txt_path = f"./realtime_saved_images/webcam_0/{user_id}/processed_images.log"
-
-    # 폴더가 존재하는지 확인
-    if not os.path.exists(processed_folder_path):
-        return jsonify({"status": "error", "message": "Processed folder not found"}), 404
+    user_folder_path = os.path.join(SAVE_FOLDER, user_id)
+    user_cam_folder_path = os.path.join(user_folder_path, cam_name)
+    save_origin_path = os.path.join(user_cam_folder_path, "origin_video")
+    save_processed_path = os.path.join(user_cam_folder_path, "processed_video")
+    origin_folder_path = os.path.join(user_cam_folder_path, "origin_images")
+    processed_folder_path = os.path.join(user_cam_folder_path, "processed_images")
+    cropped_images_path = os.path.join(user_cam_folder_path, "cropped_images")
+    output_txt_path = os.path.join(user_cam_folder_path, "predictions.txt")
+    processed_log_txt_path = os.path.join(user_folder_path, "processed_images.log")
+    
+    os.makedirs(save_origin_path, exist_ok=True)
+    os.makedirs(save_processed_path, exist_ok=True)
 
     # 이미지 파일 목록 가져오기
-    pro_image_files = sorted([f for f in os.listdir(processed_folder_path) if f.endswith('.jpg')])
     or_image_files = sorted([f for f in os.listdir(origin_folder_path) if f.endswith('.jpg')])
+    pro_image_files = sorted([f for f in os.listdir(processed_folder_path) if f.endswith('.jpg')])
 
     # 이미지가 있는지 확인
     if len(or_image_files) == 0:
+        return jsonify({"status": "error", "message": "No images found to create video"}), 404
+
+    if len(pro_image_files) == 0:
         return jsonify({"status": "error", "message": "No images found to create video"}), 404
 
     # 첫 번째 이미지를 읽어 크기를 가져옴
@@ -491,39 +505,34 @@ def realtime_upload_image_end(webcam_id):
     height, width, layers = first_image.shape
 
     # 원본 비디오 작성 준비
-    original_video_path = os.path.join(origin_folder_path, f"{user_id}_original_video.mp4")
-    original_video_writer = cv2.VideoWriter(original_video_path, cv2.VideoWriter_fourcc(*'mp4v'), 20, (width, height))
+    origin_video_path = os.path.join(save_origin_path, f"{cam_name}_{start_time}_original_video.mp4")
+    origin_video_writer = cv2.VideoWriter(origin_video_path, cv2.VideoWriter_fourcc(*'mp4v'), 30, (width, height))
 
     # 원본 이미지를 사용하여 원본 비디오 생성
     for image_file in or_image_files:
         image_path = os.path.join(origin_folder_path, image_file)
         image = cv2.imread(image_path)
-        original_video_writer.write(image)
+        origin_video_writer.write(image)
 
-    original_video_writer.release()
+    origin_video_writer.release()
 
     # 원본 비디오 작성 완료
-    print(f"Original video created at {original_video_path}")
+    print(f"Original video created at {origin_video_writer}")
 
     # 합쳐진 비디오 작성 준비
-    combined_video_path = os.path.join(processed_folder_path, f"{user_id}_combined_video.mp4")
-    combined_video_writer = cv2.VideoWriter(combined_video_path, cv2.VideoWriter_fourcc(*'mp4v'), 20, (width, height))
+    processed_video_path = os.path.join(save_processed_path, f"{cam_name}_{start_time}_processed_video.mp4")
+    processed_video_writer = cv2.VideoWriter(processed_video_path, cv2.VideoWriter_fourcc(*'mp4v'), 30, (width, height))
 
     # 이미지들을 합쳐진 비디오에 작성 (원본 이미지와 처리된 이미지를 비교)
-    for image_file in or_image_files:
-        # pro_image_files에 동일한 이미지 파일명이 있는지 확인
-        if image_file in pro_image_files:
-            image_path = os.path.join(processed_folder_path, image_file)
-        else:
-            image_path = os.path.join(origin_folder_path, image_file)
-
+    for image_file in pro_image_files:
+        image_path = os.path.join(processed_folder_path, image_file)
         image = cv2.imread(image_path)
-        combined_video_writer.write(image)
+        processed_video_writer.write(image)
 
-    combined_video_writer.release()
+    processed_video_writer.release()
 
     # 합쳐진 비디오 작성 완료
-    print(f"Combined video created at {combined_video_path}")
+    print(f"Combined video created at {processed_video_path}")
 
     # 이미지 삭제(처리된 이미지)
     for image_file in pro_image_files:
@@ -534,17 +543,10 @@ def realtime_upload_image_end(webcam_id):
     for image_file in or_image_files:
         image_path = os.path.join(origin_folder_path, image_file)
         os.remove(image_path)
-
-    user_no = get_user_no(user_id)
-    cam_num = get_cam_num(user_id, cam_name)
-    start_time = convert_filename_to_datetime(or_image_files[0])
     
-    save_video_to_db(user_no, cam_num, start_time, original_video_path, combined_video_path, output_txt_path)
-
-    os.remove(output_txt_path)
-    os.remove(processed_log_txt_path)
+    save_video_to_db(user_no, cam_num, start_time, origin_video_path, processed_video_path, output_txt_path, processed_log_txt_path, cropped_images_path)
     
-    print(f"Received and saved image from webcam {webcam_id} End")
+    print(f"Received and saved image from cam {cam_name} End")
 
     return jsonify({"message": "Image received and saved"}), 200
 

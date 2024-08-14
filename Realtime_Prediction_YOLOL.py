@@ -14,12 +14,10 @@ from collections import Counter
 from torchvision import transforms
 from PIL import Image
 
-# Activation Function
 class SiLU(nn.Module):
     def forward(self, x):
         return x * torch.sigmoid(x)
 
-# Convolutional Layer
 class Conv(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, padding, bias=False):
         super(Conv, self).__init__()
@@ -30,7 +28,6 @@ class Conv(nn.Module):
     def forward(self, x):
         return self.act(self.bn(self.conv(x)))
 
-# Bottleneck Layer
 class Bottleneck(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(Bottleneck, self).__init__()
@@ -41,7 +38,6 @@ class Bottleneck(nn.Module):
     def forward(self, x):
         return x + self.cv2(self.cv1(x))
 
-# C2f Layer
 class C2f(nn.Module):
     def __init__(self, in_channels, out_channels, num_bottlenecks):
         super(C2f, self).__init__()
@@ -56,7 +52,6 @@ class C2f(nn.Module):
             y.append(bottleneck(y[-1]))
         return self.cv2(torch.cat(y, 1))
 
-# SPPF Layer
 class SPPF(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(SPPF, self).__init__()
@@ -72,7 +67,6 @@ class SPPF(nn.Module):
         y3 = self.pool(y2)
         return self.cv2(torch.cat([x, y1, y2, y3], 1))
 
-# Detect Layer for Single Class and Single Scale Prediction
 class Detect(nn.Module):
     def __init__(self, num_classes=1):
         super(Detect, self).__init__()
@@ -86,10 +80,9 @@ class Detect(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
-# YOLOv8x Model for Single Class and Single Scale Prediction
-class YOLOv8x(nn.Module):
+class YOLOvBIT(nn.Module):
     def __init__(self, num_classes=1):
-        super(YOLOv8x, self).__init__()
+        super(YOLOvBIT, self).__init__()
         self.conv1 = Conv(3, 80, 3, 2, 1)  # P1/2
         self.conv2 = Conv(80, 160, 3, 2, 1)  # P2/4
         self.c2f1 = C2f(160, 160, 3)  # num_bottlenecks: 3
@@ -117,7 +110,7 @@ class YOLOv8x(nn.Module):
         return outputs
 
 def load_model(model_path, device):
-    model = YOLOv8x(num_classes=1)
+    model = YOLOvBIT(num_classes=1)
     model.load_state_dict(torch.load(model_path))
     model.to(device)
     model.eval()
@@ -150,7 +143,7 @@ def detect_objects(model, image, device):
             confidence = outputs[y, x, 4].item()
 
             # 신뢰도가 일정 수준 이상일 때만 바운딩 박스를 추출
-            if confidence >= 0.5:
+            if confidence >= 0.4:
                     bbox = outputs[y, x, :4].numpy()
                     cx, cy, w, h = bbox
                     cx *= image.width
@@ -424,7 +417,7 @@ def process_images(image_dir, yolo_model_path, gender_model_path, age_model_path
             #print(f"이미 처리된 이미지: {image_file}, 스킵합니다.")
             continue
 
-        if index % 24 != 0:
+        if index % 10 != 0:
             #print(f"스킵되는 이미지: {image_file}, 처리하지 않습니다.")
             continue
 
@@ -433,7 +426,6 @@ def process_images(image_dir, yolo_model_path, gender_model_path, age_model_path
 
         predictions = recognizer.recognize_faces(frame, index, image_file, yolo_model, gender_model, age_model, upclothes_model, downclothes_model, tracker, output_dir)
         save_predictions_to_txt(predictions, output_txt_path)
-        #all_predictions.extend(predictions)
 
         # 처리된 이미지 로그 저장
         save_processed_image(log_file, image_file)
@@ -451,25 +443,23 @@ def save_predictions_to_txt(predictions, output_file):
 
 if __name__ == "__main__":
     try:
-        user_no = "admin"
-        image_directory = f"./realtime_saved_images/webcam_0/"  # webcam_0 부분을 카메라 이름으로 바꿀 예정
-        yolo_model_path = './models/yololv8_model_new_best_only_person_focalloss_AdamW_120_Copy.pt'
+        #user_id, user_cam_folder_path, origin_filepath
+        user_id = "admin" #sys.argv[1]
+        user_folder_path = "./realtime_saved_images/admin/우송대" #sys.argv[2]
+        image_directory = "./realtime_saved_images/admin/우송대/origin_images" #sys.argv[3]
+        yolo_model_path = './models/yolovBIT_120.pt'
         gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_model.pth'
         #color_model_path = './models/color_model.pt'
         upclothes_model_path = './models/upclothes_version1.pt'
         downclothes_model_path = './models/downclothes_version1.pt'
         
-        output_user_path = f"./realtime_saved_images/webcam_0/{user_no}"
-        os.makedirs(output_user_path, exist_ok=True)
-        output_dir = f"./realtime_saved_images/webcam_0/{user_no}/cropped_images/"
-        os.makedirs(output_dir, exist_ok=True)
+        output_dir = os.path.join(user_folder_path, "cropped_images").replace("\\", "/")
         
-        output_txt_path = f"./realtime_saved_images/webcam_0/{user_no}/predictions.txt"
-        log_file = f"./realtime_saved_images/webcam_0/{user_no}/processed_images.log"
+        output_txt_path = os.path.join(user_folder_path, "predictions.txt").replace("\\", "/")
+        log_file = os.path.join(user_folder_path, "processed_images.log").replace("\\", "/")
         
         predictions = process_images(image_directory, yolo_model_path, gender_model_path, age_model_path, upclothes_model_path, downclothes_model_path, output_dir, log_file, output_txt_path)
-        #save_predictions_to_txt(predictions, output_txt_path)
         
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

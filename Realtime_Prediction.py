@@ -295,8 +295,10 @@ def save_predictions_to_txt(predictions, output_file):
 
 if __name__ == "__main__":
     try:
-        user_no = "admin"
-        image_directory = f"./realtime_saved_images/webcam_0/"  # webcam_0 부분을 카메라 이름으로 바꿀 예정
+        #user_id, user_folder_path, origin_filepath
+        user_id = sys.argv[1]
+        user_folder_path = sys.argv[2]
+        image_directory = sys.argv[3]
         yolo_model_path = './models/yolov8x.pt'
         gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_model.pth'
@@ -304,16 +306,12 @@ if __name__ == "__main__":
         upclothes_model_path = './models/upclothes_version1.pt'
         downclothes_model_path = './models/downclothes_version1.pt'
         
-        output_user_path = f"./realtime_saved_images/webcam_0/{user_no}"
-        os.makedirs(output_user_path, exist_ok=True)
-        output_dir = f"./realtime_saved_images/webcam_0/{user_no}/cropped_images/"
-        os.makedirs(output_dir, exist_ok=True)
+        output_dir = os.path.join(user_folder_path, "cropped_images").replace("\\", "/")
         
-        output_txt_path = f"./realtime_saved_images/webcam_0/{user_no}/predictions.txt"
-        log_file = f"./realtime_saved_images/webcam_0/{user_no}/processed_images.log"
+        output_txt_path = os.path.join(user_folder_path, "predictions.txt").replace("\\", "/")
+        log_file = os.path.join(user_folder_path, "processed_images.log").replace("\\", "/")
         
         predictions = process_images(image_directory, yolo_model_path, gender_model_path, age_model_path, upclothes_model_path, downclothes_model_path, output_dir, log_file, output_txt_path)
-        #save_predictions_to_txt(predictions, output_txt_path)
         
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
