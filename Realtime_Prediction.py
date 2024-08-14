@@ -268,7 +268,7 @@ def process_images(image_dir, yolo_model_path, gender_model_path, age_model_path
             #print(f"이미 처리된 이미지: {image_file}, 스킵합니다.")
             continue
 
-        if index % 24 != 0:
+        if index % 5 != 0:
             #print(f"스킵되는 이미지: {image_file}, 처리하지 않습니다.")
             continue
 

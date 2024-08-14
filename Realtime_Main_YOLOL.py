@@ -396,6 +396,7 @@ def detect_objects(model, image, device):
                     w *= image.width
                     cy *= image.height
                     h *= image.height
+
                     # 그리드 좌표를 이미지 스케일로 변환
                     x_min = int(cx - w / 2)
                     y_min = int(cy - h / 2)
@@ -407,10 +408,10 @@ def detect_objects(model, image, device):
     return person_detections
 
 # 백그라운드에서 실행할 함수 정의
-def run_background_process(user_id, user_cam_folder_path, origin_filepath):
+def run_background_process(user_id, user_cam_folder_path, origin_folder_path):
     global process_playing
     process = subprocess.Popen(
-        ["python", "Realtime_Prediction_YOLOL.py", user_id, user_cam_folder_path, origin_filepath],
+        ["python", "Realtime_Prediction_YOLOL.py", user_id, user_cam_folder_path, origin_folder_path],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     stdout, stderr = process.communicate()
@@ -434,7 +435,7 @@ def realtime_upload_file():
         #cam_name = user_data.get('cam_name', '')
 
         user_id = "admin"
-        cam_name = "우송대"
+        cam_name = "Woosong"
 
         connection = get_db_connection()
 
@@ -491,7 +492,7 @@ def upload_image():
     #user_id = data.get('user_id')
     #cam_name = data.get('cam_name')
     user_id = "admin"
-    cam_name = "우송대"
+    cam_name = "Woosong"
     #if not user_id:
         #return jsonify({"error": "User ID is required"}), 400
 
@@ -545,7 +546,7 @@ def upload_image():
         # 새로운 스레드를 생성하여 백그라운드에서 스크립트를 실행
         threading.Thread(
             target=run_background_process,
-            args=(user_id, user_cam_folder_path, origin_filepath)
+            args=(user_id, user_cam_folder_path, origin_folder_path)
         ).start()
         process_playing = True
 
@@ -615,7 +616,7 @@ def realtime_upload_image_end():
     user_data = data.get('user_data', {})
     user_id = user_data.get('user_id', '')
     cam_name = user_data.get('cam_name', '')
-    #cam_name = "우송대"
+    #cam_name = "Woosong"
 
     user_no = get_user_no(user_id)
     cam_num = get_cam_num(user_id, cam_name)

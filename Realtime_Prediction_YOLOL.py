@@ -143,7 +143,7 @@ def detect_objects(model, image, device):
             confidence = outputs[y, x, 4].item()
 
             # 신뢰도가 일정 수준 이상일 때만 바운딩 박스를 추출
-            if confidence >= 0.4:
+            if confidence >= 0.6:
                     bbox = outputs[y, x, :4].numpy()
                     cx, cy, w, h = bbox
                     cx *= image.width
@@ -417,7 +417,7 @@ def process_images(image_dir, yolo_model_path, gender_model_path, age_model_path
             #print(f"이미 처리된 이미지: {image_file}, 스킵합니다.")
             continue
 
-        if index % 10 != 0:
+        if index % 5 != 0:
             #print(f"스킵되는 이미지: {image_file}, 처리하지 않습니다.")
             continue
 
@@ -444,9 +444,9 @@ def save_predictions_to_txt(predictions, output_file):
 if __name__ == "__main__":
     try:
         #user_id, user_cam_folder_path, origin_filepath
-        user_id = "admin" #sys.argv[1]
-        user_folder_path = "./realtime_saved_images/admin/우송대" #sys.argv[2]
-        image_directory = "./realtime_saved_images/admin/우송대/origin_images" #sys.argv[3]
+        user_id = sys.argv[1]
+        user_folder_path = sys.argv[2]
+        image_directory = sys.argv[3]
         yolo_model_path = './models/yolovBIT_120.pt'
         gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_model.pth'

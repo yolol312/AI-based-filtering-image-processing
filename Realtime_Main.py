@@ -258,10 +258,10 @@ def detect_persons(frame, yolo_model):
     return person_detections
 
 # 백그라운드에서 실행할 함수 정의
-def run_background_process(user_id, user_cam_folder_path, origin_filepath):
+def run_background_process(user_id, user_cam_folder_path, origin_folder_path):
     global process_playing
     process = subprocess.Popen(
-        ["python", "Realtime_Prediction.py", user_id, user_cam_folder_path, origin_filepath],
+        ["python", "Realtime_Prediction.py", user_id, user_cam_folder_path, origin_folder_path],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     stdout, stderr = process.communicate()
@@ -369,7 +369,7 @@ def upload_image():
     origin_folder_path = os.path.join(user_cam_folder_path, "origin_images")
     processed_folder_path = os.path.join(user_cam_folder_path, "processed_images")
     cropped_images_path = os.path.join(user_cam_folder_path, "cropped_images")
-    output_txt_path = os.path.join(user_cam_folder_path, "predictions.txt")
+    output_txt_path = os.path.join(user_cam_folder_path, "predictions.txt").replace("\\", "/")
 
     origin_filepath = os.path.join(origin_folder_path, filename).replace("\\", "/")
     processed_filepath = os.path.join(processed_folder_path, filename).replace("\\", "/")
@@ -396,7 +396,7 @@ def upload_image():
         # 새로운 스레드를 생성하여 백그라운드에서 스크립트를 실행
         threading.Thread(
             target=run_background_process,
-            args=(user_id, user_cam_folder_path, origin_filepath)
+            args=(user_id, user_cam_folder_path, origin_folder_path)
         ).start()
         process_playing = True
 
@@ -482,8 +482,8 @@ def realtime_upload_image_end():
     origin_folder_path = os.path.join(user_cam_folder_path, "origin_images")
     processed_folder_path = os.path.join(user_cam_folder_path, "processed_images")
     cropped_images_path = os.path.join(user_cam_folder_path, "cropped_images")
-    output_txt_path = os.path.join(user_cam_folder_path, "predictions.txt")
-    processed_log_txt_path = os.path.join(user_folder_path, "processed_images.log")
+    output_txt_path = os.path.join(user_cam_folder_path, "predictions.txt").replace("\\", "/")
+    processed_log_txt_path = os.path.join(user_folder_path, "processed_images.log").replace("\\", "/")
     
     os.makedirs(save_origin_path, exist_ok=True)
     os.makedirs(save_processed_path, exist_ok=True)
