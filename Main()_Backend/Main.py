@@ -158,7 +158,7 @@ class FaceRecognizer:
                         downclothes = predict_downclothes(frame, downclothes_model, person_box)
 
                         # Save face images only if they appear in at least 2 frames
-                        if self.face_frame_count[person_id] >= 5:
+                        if self.face_frame_count[person_id] >= 6:
                             output_folder = os.path.join(output_dir, f'{video_name}_face')
                             os.makedirs(output_folder, exist_ok=True)
                             face_image_resized = cv2.resize(face_image, (160, 160))
@@ -260,7 +260,7 @@ def load_yolo_model(model_path, device):
     return model
 
 # global_persons 정보를 .txt 파일로 저장
-def save_global_persons(user_no, output_dir, face_frame_count, min_frames = 5):
+def save_global_persons(user_no, output_dir, face_frame_count, min_frames = 6):
     global global_persons_by_user
     output_path = os.path.join(output_dir, f"{user_no}_global_persons.txt")
     
@@ -336,7 +336,7 @@ def process_video(video_path, output_dir, yolo_model_path, gender_model_path, ag
 
     v_cap = cv2.VideoCapture(video_path)
     frame_rate = int(v_cap.get(cv2.CAP_PROP_FPS))
-    frame_interval = 3 # 8프레임마다 처리
+    frame_interval = 6 # 8프레임마다 처리
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cpu_device = torch.device('cpu')
@@ -422,8 +422,11 @@ def process_videos(video_paths, output_dir, yolo_model_path, gender_model_path, 
 
 if __name__ == "__main__":
     try:
-        video_name = sys.argv[1]
-        user_no =  sys.argv[2] 
+        video_name = "W1-3"
+        user_no =  "modelTest"
+
+        #video_name = sys.argv[1]
+        #user_no = sys.argv[2]
         video_directory = f"./uploaded_videos/{user_no}/"
         video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.endswith(('.mp4', '.avi', '.mov'))]
         output_directory = f"./extracted_images/{user_no}/"
@@ -431,9 +434,9 @@ if __name__ == "__main__":
         
         #gender_model_path = './models/gender_best.pth'  #서양인 모델
         gender_model_path = './models/gender_model.pt' #동양인 모델
-        age_model_path = './models/age_best.pth'
+        age_model_path = './models/age_model_0814.pth'
         upclothes_model_path = './models/upclothes_model.pt'
-        downclothes_model_path = './models/downclothes_model.pt'
+        downclothes_model_path = './models/downclothes_model2.pt'
         
         process_videos(video_paths, output_directory, yolo_model_path, gender_model_path, age_model_path, upclothes_model_path, downclothes_model_path, user_no, video_name)
         

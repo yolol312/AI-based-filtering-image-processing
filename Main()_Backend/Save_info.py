@@ -134,13 +134,22 @@ def save_best_faces(image_files, output_folder, info_dict, filtered_persons):
 
 if __name__ == "__main__":
     try:
-        video_name = sys.argv[1]
-        user_id = sys.argv[2]
-        filter_id = sys.argv[3]
-        filter_gender = sys.argv[4].lower()
-        filter_age = sys.argv[5].lower()
-        filter_upclothes = sys.argv[6].lower()
-        filter_downclothes = sys.argv[7].lower()
+        video_name = "W17-3"
+        user_id = "modelTest"
+        filter_id = "1"
+        filter_gender = "none"
+        filter_age = "none"
+        filter_upclothes = "none"
+        filter_downclothes = "none"
+
+
+        #video_name = sys.argv[1]
+        #user_id = sys.argv[2]
+        #filter_id = sys.argv[3]
+        #filter_gender = sys.argv[4].lower()
+        #filter_age = sys.argv[5].lower()
+        #filter_upclothes = sys.argv[6].lower()
+        #filter_downclothes = sys.argv[7].lower()
 
         if filter_gender == '여성':
             filter_gender = 'female'

@@ -8,6 +8,7 @@ from ultralytics import YOLO
 from PIL import Image
 from deep_sort_realtime.deepsort_tracker import DeepSort
 from age_model import ResNetAgeModel, device, test_transform
+import subprocess
 
 class FaceRecognizer:
     def __init__(self, device=None):
@@ -116,12 +117,22 @@ class FaceRecognizer:
 
         tracks = tracker.update_tracks(results, frame=frame)
 
+        for track_id in list(self.previous_tracks.keys()):
+            bbox = self.previous_tracks[track_id]
+            if bbox[0] < 0 or bbox[1] < 0 or bbox[2] > frame.shape[1] or bbox[3] > frame.shape[0]:
+                del self.previous_tracks[track_id]
+
         active_track_ids = {track.track_id for track in tracks if track.is_confirmed()}
         inactive_track_ids = set(self.tracked_faces.keys()) - active_track_ids
+
         for inactive_track_id in inactive_track_ids:
             if self.tracked_faces[inactive_track_id] in self.known_faces:
                 self.known_faces.remove(self.tracked_faces[inactive_track_id])
             del self.tracked_faces[inactive_track_id]
+
+        for track_id in list(self.previous_tracks.keys()):
+            if track_id not in active_track_ids:
+                del self.previous_tracks[track_id]
 
         overlapping_track_ids = set()
         frame_area = frame.shape[0] * frame.shape[1]
@@ -203,6 +214,7 @@ def calculate_tracking_parameters(interval):
     
     return max_age, nn_budget
 
+
 def process_video(video_path, output_dir, known_face_paths, yolo_model_path, gender_model_path, age_model_path, person_id, interval=3, target_fps=1):
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     recognizer = FaceRecognizer()
@@ -228,6 +240,9 @@ def process_video(video_path, output_dir, known_face_paths, yolo_model_path, gen
     tracker = DeepSort(max_age=max_age, n_init=3, nn_budget=nn_budget)
 
     frame_number = 0
+    output_person_folder = os.path.join(output_dir, f"{video_name}_clip", person_id)
+    temp_video_path = os.path.join(output_person_folder, f"{video_name}_{person_id}_output.mp4")
+
 
     while True:
         success, frame = v_cap.read()
@@ -244,10 +259,8 @@ def process_video(video_path, output_dir, known_face_paths, yolo_model_path, gen
 
         if frame_width is None or frame_height is None:
             frame_height, frame_width = frame.shape[:2]
-            output_person_folder = os.path.join(output_dir, f"{video_name}_clip", person_id)
             os.makedirs(output_person_folder, exist_ok=True)
-            output_video_path = os.path.join(output_person_folder, f"{video_name}_{person_id}_output.mp4")
-            video_writer = cv2.VideoWriter(output_video_path, cv2.VideoWriter_fourcc(*'mp4v'), frame_rate, (frame_width, frame_height))
+            video_writer = cv2.VideoWriter(temp_video_path, cv2.VideoWriter_fourcc(*'mp4v'), frame_rate, (frame_width, frame_height))
 
         if video_writer:
             video_writer.write(frame)
@@ -256,6 +269,7 @@ def process_video(video_path, output_dir, known_face_paths, yolo_model_path, gen
     if video_writer:
         video_writer.release()
     cv2.destroyAllWindows()
+
 
 def process_videos(video_directory, output_dir, known_face_paths, yolo_model_path, gender_model_path, age_model_path, interval, video_name, target_fps=10):
     video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.startswith(video_name) and file.endswith(('.mp4', '.avi', '.mov'))]
