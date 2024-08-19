@@ -401,7 +401,7 @@ def upload_image():
         process_playing = True
 
 
-    if image_count % 5 == 0 and image_count % 150 != 0:
+    if image_count % 6 == 0 and image_count % 150 != 0:
         print("Process Start")
         # 실시간 트래킹 처리
         person_detections = detect_persons(img, yolo_model)

@@ -109,6 +109,7 @@ class YOLOvBIT(nn.Module):
         outputs = self.detect(x10)
         return outputs
 
+# 커스텀 모델 사용 시 필요
 def load_model(model_path, device):
     model = YOLOvBIT(num_classes=1)
     model.load_state_dict(torch.load(model_path))
@@ -116,7 +117,8 @@ def load_model(model_path, device):
     model.eval()
     return model
 
-def detect_objects(model, image, device):
+# 커스텀 모델 사용 시 필요
+def detect_objects(model, image, device, min_size=40, max_size=500):
     print("Detecting persons...")
 
     # 이미지가 numpy 배열인 경우 PIL 이미지로 변환
@@ -143,19 +145,21 @@ def detect_objects(model, image, device):
             confidence = outputs[y, x, 4].item()
 
             # 신뢰도가 일정 수준 이상일 때만 바운딩 박스를 추출
-            if confidence >= 0.6:
-                    bbox = outputs[y, x, :4].numpy()
-                    cx, cy, w, h = bbox
-                    cx *= image.width
-                    w *= image.width
-                    cy *= image.height
-                    h *= image.height
-                    # 그리드 좌표를 이미지 스케일로 변환
-                    x_min = int(cx - w / 2)
-                    y_min = int(cy - h / 2)
-                    x_max = int(cx + w / 2)
-                    y_max = int(cy + h / 2)
-                    
+            if confidence >= 0.5:
+                bbox = outputs[y, x, :4].numpy()
+                cx, cy, w, h = bbox
+                cx *= image.width
+                w *= image.width
+                cy *= image.height
+                h *= image.height
+                # 그리드 좌표를 이미지 크기에 맞게 변환
+                x_min = int(cx - w / 2)
+                y_min = int(cy - h / 2)
+                x_max = int(cx + w / 2)
+                y_max = int(cy + h / 2)
+                
+                # 너무 작거나 너무 큰 객체는 필터링
+                if w >= min_size and h >= min_size and w <= max_size and h <= max_size:
                     person_detections.append((x_min, y_min, x_max, y_max))
 
     return person_detections
@@ -172,7 +176,7 @@ class FaceRecognizer:
 
     def detect_persons(self, frame, yolo_model):
         print("Detecting persons...")
-        yolo_results = yolo_model.predict(source=[frame], save=False)[0]
+        yolo_results = yolo_model.predict(source=[frame], save=False, classes=[0])[0]
         person_detections = [
             (int(data[0]), int(data[1]), int(data[2]), int(data[3]))
             for data in yolo_results.boxes.data.tolist()
@@ -225,7 +229,7 @@ class FaceRecognizer:
         original_shape = frame.shape[:2]
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         forward_embeddings = self.extract_embeddings(frame_rgb)
-        person_detections = detect_objects(yolo_model, frame, self.device)
+        person_detections = detect_objects(yolo_model, frame, self.device) # 커스텀 모델 사용 시 필요
 
         results = []
         for (xmin, ymin, xmax, ymax) in person_detections:
@@ -393,7 +397,7 @@ def process_images(image_dir, yolo_model_path, gender_model_path, age_model_path
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    yolo_model = load_model(yolo_model_path, device)
+    yolo_model = load_model(yolo_model_path, device) # 커스텀 모델 사용 시 필요
     gender_model = YOLO(gender_model_path, device)
     age_model = ResNetAgeModel(num_classes=4)
     age_model.load_state_dict(torch.load(age_model_path))
@@ -445,19 +449,19 @@ if __name__ == "__main__":
     try:
         #user_id, user_cam_folder_path, origin_filepath
         user_id = sys.argv[1]
-        user_folder_path = sys.argv[2]
+        user_cam_folder_path = sys.argv[2]
         image_directory = sys.argv[3]
-        yolo_model_path = './models/yolovBIT_120.pt'
+        yolo_model_path = './models/yolovBIT_120.pt' # 커스텀 모델 사용 시 필요
         gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_model.pth'
         #color_model_path = './models/color_model.pt'
         upclothes_model_path = './models/upclothes_version1.pt'
-        downclothes_model_path = './models/downclothes_version1.pt'
+        downclothes_model_path = './models/downclothes_Version3.pt'
         
-        output_dir = os.path.join(user_folder_path, "cropped_images").replace("\\", "/")
+        output_dir = os.path.join(user_cam_folder_path, "cropped_images").replace("\\", "/")
         
-        output_txt_path = os.path.join(user_folder_path, "predictions.txt").replace("\\", "/")
-        log_file = os.path.join(user_folder_path, "processed_images.log").replace("\\", "/")
+        output_txt_path = os.path.join(user_cam_folder_path, "predictions.txt").replace("\\", "/")
+        log_file = os.path.join(user_cam_folder_path, "processed_images.log").replace("\\", "/")
         
         predictions = process_images(image_directory, yolo_model_path, gender_model_path, age_model_path, upclothes_model_path, downclothes_model_path, output_dir, log_file, output_txt_path)
         
