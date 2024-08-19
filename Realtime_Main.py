@@ -145,7 +145,7 @@ def load_model(model_path, device):
 
 # YOLO 모델 및 DeepSort 초기화
 yolo_model = YOLO('models/yolov8x.pt')  # YOLO 모델 경로를 적절히 설정하세요
-tracker = DeepSort(max_age=30, n_init=3, nn_budget=60)
+tracker = DeepSort(max_age=30, nn_budget=20)  # DeepSort 트래커 설정
 
 def detect_persons(frame, yolo_model):
     print("Detecting persons...")
@@ -1191,7 +1191,7 @@ def realtime_search_previous_analysis_result_logs():
     return jsonify({"message": "Analysis results successfully search logs", "logs" : processed_data}), 200
 
 # 9. 이전 분석 결과 삭제 (Post)
-@app.route('/realtime_delete_previous_analysis_result', methods=['POST'])
+@app.route('/realtime_delete_previous_analysis_result', methods=['DELETE'])
 def realtime_delete_previous_analysis_result():
     data = request.get_json()
 
