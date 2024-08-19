@@ -16,6 +16,7 @@ from moviepy.editor import VideoFileClip
 import json
 import time
 from datetime import datetime, timedelta
+import bcrypt
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -1990,7 +1991,6 @@ def select_person():
         cursor.close()
         connection.close()
 
-
 # 9. Map 경로 관련 엔드포인트 (GET)
 @app.route('/map_cal', methods=['GET'])
 def map_cal():
@@ -2030,7 +2030,8 @@ def map_cal():
             location_data.append({
                 "cam_name": row['cam_name'],
                 "cam_latitude": float(row['cam_latitude']),
-                "cam_longitude": float(row['cam_longitude'])
+                "cam_longitude": float(row['cam_longitude']),
+                "clip_time": row['clip_time'].strftime("%Y-%m-%d %H:%M:%S")
             })
             address_data.append({
                  "address": row['address']
@@ -2592,73 +2593,74 @@ def delete_map():
         return jsonify({"error": "Address is required"}), 400
 
     connection = get_db_connection()
-    cursor = connection.cursor(dictionary=True)
+    #cursor = connection.cursor(dictionary=True)
 
     try:
-        # user_id를 기반으로 user_no를 찾습니다.
-        user_sql = "SELECT user_no FROM user WHERE user_id = %s"
-        cursor.execute(user_sql, (user_id,))
-        user_result = cursor.fetchone()
+        with connection.cursor() as cursor:
+            # user_id를 기반으로 user_no를 찾습니다.
+            user_sql = "SELECT user_no FROM user WHERE user_id = %s"
+            cursor.execute(user_sql, (user_id,))
+            user_result = cursor.fetchone()
 
-        if user_result is None:
-            return jsonify({"error": "User not found"}), 404
+            if user_result is None:
+                return jsonify({"error": "User not found"}), 404
 
-        user_no = user_result['user_no']
+            user_no = user_result['user_no']
 
-        # 삭제할 맵 정보를 먼저 가져옵니다.
-        select_map_sql = """
-            SELECT * FROM map 
-            WHERE user_no = %s AND address = %s
-        """
-        cursor.execute(select_map_sql, (user_no, address))
-        delete_map_result = cursor.fetchall()
+            # 삭제할 맵 정보를 먼저 가져옵니다.
+            select_map_sql = """
+                SELECT * FROM map 
+                WHERE user_no = %s AND address = %s
+            """
+            cursor.execute(select_map_sql, (user_no, address))
+            delete_map_result = cursor.fetchall()
 
-        if not delete_map_result:
-            return jsonify({"error": "Map not found"}), 404
+            if not delete_map_result:
+                return jsonify({"error": "Map not found"}), 404
 
-        # 삭제할 맵 정보를 저장합니다.
-        delete_map_dict = [dict(row) for row in delete_map_result]
+            # 삭제할 맵 정보를 저장합니다.
+            delete_map_dict = [dict(row) for row in delete_map_result]
 
-        # 맵 삭제를 수행합니다.
-        delete_map_sql = """
-            DELETE FROM map 
-            WHERE user_no = %s AND address = %s
-        """
-        cursor.execute(delete_map_sql, (user_no, address))
-        connection.commit()
+            # 맵 삭제를 수행합니다.
+            delete_map_sql = """
+                DELETE FROM map 
+                WHERE user_no = %s AND address = %s
+            """
+            cursor.execute(delete_map_sql, (user_no, address))
+            connection.commit()
 
-        # 삭제 후 map, camera, person, filter 테이블의 연관된 정보를 가져옵니다.
-        map_camera_provideo_sql = """
-            SELECT 
-                m.address, 
-                m.map_latitude, 
-                m.map_longitude, 
-                c.cam_name, 
-                c.cam_latitude, 
-                c.cam_longitude, 
-                p.person_id,
-                f.filter_id,
-                f.filter_gender,
-                f.filter_age,
-                f.filter_upclothes,
-                f.filter_downclothes,
-                f.bundle_name
-            FROM 
-                map m
-            JOIN 
-                camera c ON m.map_num = c.map_num
-            LEFT JOIN 
-                origin_video orv ON c.cam_num = orv.cam_num
-            LEFT JOIN 
-                person p ON p.or_video_id = orv.or_video_id
-            LEFT JOIN 
-                filter f ON f.filter_id = p.filter_id
-            WHERE 
-                m.user_no = %s;
-        """
-        cursor.execute(map_camera_provideo_sql, (user_no,))
-        map_camera_provideo_result = cursor.fetchall()
-        map_camera_provideo_dict = [dict(row) for row in map_camera_provideo_result]
+            # 삭제 후 map, camera, person, filter 테이블의 연관된 정보를 가져옵니다.
+            map_camera_provideo_sql = """
+                SELECT 
+                    m.address, 
+                    m.map_latitude, 
+                    m.map_longitude, 
+                    c.cam_name, 
+                    c.cam_latitude, 
+                    c.cam_longitude, 
+                    p.person_id,
+                    f.filter_id,
+                    f.filter_gender,
+                    f.filter_age,
+                    f.filter_upclothes,
+                    f.filter_downclothes,
+                    f.bundle_name
+                FROM 
+                    map m
+                JOIN 
+                    camera c ON m.map_num = c.map_num
+                LEFT JOIN 
+                    origin_video orv ON c.cam_num = orv.cam_num
+                LEFT JOIN 
+                    person p ON p.or_video_id = orv.or_video_id
+                LEFT JOIN 
+                    filter f ON f.filter_id = p.filter_id
+                WHERE 
+                    m.user_no = %s;
+            """
+            cursor.execute(map_camera_provideo_sql, (user_no,))
+            map_camera_provideo_result = cursor.fetchall()
+            map_camera_provideo_dict = [dict(row) for row in map_camera_provideo_result]
 
         # 삭제된 맵 정보와 업데이트된 관련 정보를 반환합니다.
         return jsonify({
@@ -2675,6 +2677,60 @@ def delete_map():
         # 커서와 연결을 닫습니다.
         cursor.close()
         connection.close()
+
+# 16. 비밀번호 업데이트 엔드포인트 (POST)
+@app.route('/password_update', methods=['POST'])
+def password_update():
+    try:
+        data = request.get_json()
+
+        # 요청 데이터 유효성 검사
+        if not data:
+            return jsonify({"error": "잘못된 요청입니다."}), 400
+        
+        user_data = data.get('user_data', {})
+        user_id = user_data.get('user_id')
+        user_pw = user_data.get('user_pw')
+        new_pw = user_data.get('new_pw')
+
+        # 필수 필드 확인
+        if not user_id:
+            return jsonify({"error": "사용자 ID가 누락되었습니다."}), 400
+        if not user_pw:
+            return jsonify({"error": "기존 비밀번호가 누락되었습니다."}), 400
+        if not new_pw:
+            return jsonify({"error": "새 비밀번호가 누락되었습니다."}), 400
+
+        # DB 연결
+        connection = get_db_connection()
+        with connection.cursor() as cursor:
+            # 유저의 현재 비밀번호 조회
+            cursor.execute("SELECT password FROM password LEFT JOIN user ON password.user_no = user.user_no WHERE user_id = %s", (user_id,))
+            result = cursor.fetchone()
+
+            if result:
+                stored_pw = result['password']  # 저장된 비밀번호
+
+                # 비밀번호 확인 (일반 텍스트 비교)
+                if user_pw == stored_pw:
+                    # 비밀번호가 일치할 경우, 새로운 비밀번호로 업데이트
+                    cursor.execute("UPDATE password SET password = %s WHERE user_no = (SELECT user_no FROM user WHERE user_id = %s)", (new_pw, user_id))
+                    connection.commit()
+
+                    return jsonify({"message": "비밀번호가 성공적으로 변경되었습니다."}), 200
+                else:
+                    return jsonify({"error": "기존 비밀번호가 맞지 않습니다."}), 400
+            else:
+                return jsonify({"error": "사용자를 찾을 수 없습니다."}), 404
+
+    except Exception as e:
+        print(e)
+        return jsonify({"error": "서버 오류입니다."}), 500
+
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+
 
 if __name__ == '__main__':
     print("Starting server")  # 서버 시작 디버깅 메시지
