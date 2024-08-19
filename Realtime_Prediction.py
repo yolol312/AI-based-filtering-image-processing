@@ -210,7 +210,7 @@ def predict_upclothes(frame, clothes_model, bbox):
     
     clothes_results = clothes_model.predict(source=[roi], save=False)[0]
     
-    clothes_names = {0: 'dress', 1: 'longsleevetop', 2: 'shortsleevetop', 3: 'sleeveless'}
+    clothes_names = {0: 'longsleevetop', 1: 'shortsleevetop', 2: 'sleeveless'}
     
     if clothes_results.boxes.data.shape[0] > 0:
         clothes_class = int(clothes_results.boxes.data[0][5])
@@ -303,8 +303,8 @@ if __name__ == "__main__":
         gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_model.pth'
         #color_model_path = './models/color_model.pt'
-        upclothes_model_path = './models/upclothes_version1.pt'
-        downclothes_model_path = './models/downclothes_version1.pt'
+        upclothes_model_path = './models/best_Version3_top.pt'
+        downclothes_model_path = './models/best_Version3_bottom.pt'
         
         output_dir = os.path.join(user_folder_path, "cropped_images").replace("\\", "/")
         

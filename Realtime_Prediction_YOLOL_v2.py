@@ -13,6 +13,10 @@ from PIL import Image
 from collections import Counter
 from torchvision import transforms
 from PIL import Image
+import pytesseract
+import re
+
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 class SiLU(nn.Module):
     def forward(self, x):
@@ -164,6 +168,21 @@ def detect_objects(model, image, device, min_size=40, max_size=500):
 
     return person_detections
 
+def load_detections_and_tracks(image_name, bbox_txt_file):
+    person_detections = []
+    tracker_outputs = []
+
+    with open(bbox_txt_file, 'r') as f:
+        for line in f:
+            parts = line.strip().split(',')
+            if parts[0] == image_name:
+                track_id = int(parts[1])
+                x1, y1, x2, y2 = map(int, parts[2:])
+                person_detections.append([x1, y1, x2, y2])
+                tracker_outputs.append(track_id)
+
+    return person_detections, tracker_outputs
+
 class FaceRecognizer:
     def __init__(self, device=None):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') if device is None else device
@@ -225,24 +244,20 @@ class FaceRecognizer:
     def compare_similarity(embedding1, embedding2):
         return np.dot(embedding1, embedding2) / (np.linalg.norm(embedding1) * np.linalg.norm(embedding2))
 
-    def recognize_faces(self, frame, frame_number, image_name, yolo_model, gender_model, age_model, upclothes_model, downclothes_model, tracker, output_dir):
+    def recognize_faces(self, image_file, frame, frame_number, image_name, gender_model, age_model, upclothes_model, downclothes_model, output_dir, bbox_txt_file):
         original_shape = frame.shape[:2]
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         forward_embeddings = self.extract_embeddings(frame_rgb)
-        person_detections = detect_objects(yolo_model, frame, self.device) # 커스텀 모델 사용 시 필요
 
-        results = []
-        for (xmin, ymin, xmax, ymax) in person_detections:
-            results.append([[xmin, ymin, xmax - xmin, ymax - ymin], 1.0, 0])
-
-        tracker_outputs = tracker.update_tracks(results, frame=frame)
+        # 바운딩 박스와 track_id 정보를 텍스트 파일에서 불러옴
+        person_detections, tracker_outputs = load_detections_and_tracks(image_file, bbox_txt_file)
 
         predictions = []
 
-        for track in tracker_outputs:
-            bbox = track.to_tlbr()
+        for bbox, track_id in zip(person_detections, tracker_outputs):
+            x_min, y_min, x_max, y_max = bbox
+            bbox = [x_min, y_min, x_max, y_max]
             bbox = [int(coord) for coord in np.array(bbox)]  # 모든 좌표를 int형으로 변환
-            track_id = track.track_id
             upclothes = predict_upclothes(frame, upclothes_model, bbox)
             downclothes = predict_downclothes(frame, downclothes_model, bbox)
 
@@ -363,7 +378,7 @@ def predict_upclothes(frame, clothes_model, bbox):
     
     clothes_results = clothes_model.predict(source=[roi], save=False)[0]
     
-    clothes_names = {0: 'dress', 1: 'longsleevetop', 2: 'shortsleevetop', 3: 'sleeveless'}
+    clothes_names = {0: 'longsleevetop', 1: 'shortsleevetop', 2: 'sleeveless'}
     
     if clothes_results.boxes.data.shape[0] > 0:
         clothes_class = int(clothes_results.boxes.data[0][5])
@@ -392,12 +407,11 @@ def load_yolo_model(model_path, device):
     model.to(device)
     return model
 
-def process_images(image_dir, yolo_model_path, gender_model_path, age_model_path, upclothes_model_path, downclothes_model_path, output_dir, log_file, output_txt_path):
+def process_images(image_dir, yolo_model_path, gender_model_path, age_model_path, upclothes_model_path, downclothes_model_path, output_dir, log_file, output_txt_path, bbox_txt_file):
     recognizer = FaceRecognizer()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    yolo_model = load_model(yolo_model_path, device) # 커스텀 모델 사용 시 필요
     gender_model = YOLO(gender_model_path, device)
     age_model = ResNetAgeModel(num_classes=4)
     age_model.load_state_dict(torch.load(age_model_path))
@@ -406,8 +420,6 @@ def process_images(image_dir, yolo_model_path, gender_model_path, age_model_path
 
     upclothes_model = load_yolo_model(upclothes_model_path, device)
     downclothes_model = load_yolo_model(downclothes_model_path, device)
-
-    tracker = DeepSort(max_age=30, nn_budget=20)  # DeepSort 트래커 설정
 
     # 처리된 이미지 추적
     processed_images = load_processed_images(log_file)
@@ -421,14 +433,14 @@ def process_images(image_dir, yolo_model_path, gender_model_path, age_model_path
             #print(f"이미 처리된 이미지: {image_file}, 스킵합니다.")
             continue
 
-        if index % 5 != 0:
+        #if index % 6 != 0:
             #print(f"스킵되는 이미지: {image_file}, 처리하지 않습니다.")
-            continue
+            #continue
 
         image_path = os.path.join(image_dir, image_file)
         frame = cv2.imread(image_path)
 
-        predictions = recognizer.recognize_faces(frame, index, image_file, yolo_model, gender_model, age_model, upclothes_model, downclothes_model, tracker, output_dir)
+        predictions = recognizer.recognize_faces(image_file, frame, index, image_file, gender_model, age_model, upclothes_model, downclothes_model, output_dir, bbox_txt_file)
         save_predictions_to_txt(predictions, output_txt_path)
 
         # 처리된 이미지 로그 저장
@@ -448,22 +460,23 @@ def save_predictions_to_txt(predictions, output_file):
 if __name__ == "__main__":
     try:
         #user_id, user_cam_folder_path, origin_filepath
-        user_id = sys.argv[1]
-        user_cam_folder_path = sys.argv[2]
-        image_directory = sys.argv[3]
-        yolo_model_path = './models/yolovBIT_120.pt' # 커스텀 모델 사용 시 필요
+        user_id = sys.argv[1] #horyunee / sys.argv[1]
+        user_cam_folder_path = sys.argv[2] #./realtime_saved_images/horyunee/WB39 / sys.argv[2]
+        image_directory = sys.argv[3] #./realtime_saved_images/horyunee/WB39/processed_images / sys.argv[3]
+        yolo_model_path = './models/yolovBIT_170.pt' # 커스텀 모델 사용 시 필요
         gender_model_path = './models/gender_model.pt'
         age_model_path = './models/age_model.pth'
         #color_model_path = './models/color_model.pt'
-        upclothes_model_path = './models/upclothes_version1.pt'
-        downclothes_model_path = './models/downclothes_Version3.pt'
+        upclothes_model_path = './models/best_Version3_top.pt'
+        downclothes_model_path = './models/best_Version3_bottom.pt'
         
         output_dir = os.path.join(user_cam_folder_path, "cropped_images").replace("\\", "/")
         
         output_txt_path = os.path.join(user_cam_folder_path, "predictions.txt").replace("\\", "/")
         log_file = os.path.join(user_cam_folder_path, "processed_images.log").replace("\\", "/")
+        bbox_txt_file = os.path.join(image_directory, "bbox_info.txt").replace("\\", "/")
         
-        predictions = process_images(image_directory, yolo_model_path, gender_model_path, age_model_path, upclothes_model_path, downclothes_model_path, output_dir, log_file, output_txt_path)
+        predictions = process_images(image_directory, yolo_model_path, gender_model_path, age_model_path, upclothes_model_path, downclothes_model_path, output_dir, log_file, output_txt_path, bbox_txt_file)
         
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

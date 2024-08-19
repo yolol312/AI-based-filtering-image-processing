@@ -145,9 +145,9 @@ def load_model(model_path, device):
 
 # YOLO 모델 및 DeepSort 초기화
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model_path = 'models/yolovBIT_120.pt'  # 모델 경로를 입력하세요
+model_path = 'models/yolovBIT_170.pt'  # 모델 경로를 입력하세요
 yolo_model = load_model(model_path, device)  # YOLO 모델 경로를 적절히 설정하세요
-tracker = DeepSort(max_age=30, n_init=3, nn_budget=60)
+tracker = DeepSort(max_age=30, nn_budget=20)  # DeepSort 트래커 설정
 
 # folder_path에 있는 이미지 파일 수를 계산하는 함수
 def count_images_in_folder(folder_path):
@@ -616,7 +616,7 @@ def get_db_connection():
         cursorclass=pymysql.cursors.DictCursor
     )
 
-def detect_objects(model, image, device):
+def detect_objects(model, image, device, min_size=40, max_size=500):
     print("Detecting persons...")
 
     # 이미지가 numpy 배열인 경우 PIL 이미지로 변환
@@ -643,7 +643,7 @@ def detect_objects(model, image, device):
             confidence = outputs[y, x, 4].item()
 
             # 신뢰도가 일정 수준 이상일 때만 바운딩 박스를 추출
-            if confidence >= 0.65:
+            if confidence >= 0.6:
                 bbox = outputs[y, x, :4].numpy()
                 cx, cy, w, h = bbox
                 cx *= image.width
@@ -656,15 +656,17 @@ def detect_objects(model, image, device):
                 x_max = int(cx + w / 2)
                 y_max = int(cy + h / 2)
                 
-                person_detections.append((x_min, y_min, x_max, y_max))
+                # 너무 작거나 너무 큰 객체는 필터링
+                if w >= min_size and h >= min_size and w <= max_size and h <= max_size:
+                    person_detections.append((x_min, y_min, x_max, y_max))
 
     return person_detections
 
 # 백그라운드에서 실행할 함수 정의
-def run_background_process(user_id, user_cam_folder_path, origin_folder_path):
+def run_background_process(user_id, user_cam_folder_path, processed_folder_path):
     global process_playing
     process = subprocess.Popen(
-        ["python", "Realtime_Prediction_YOLOL.py", user_id, user_cam_folder_path, origin_folder_path],
+        ["python", "Realtime_Prediction_YOLOL_v2.py", user_id, user_cam_folder_path, processed_folder_path],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     stdout, stderr = process.communicate()
@@ -825,7 +827,7 @@ def realtime_upload_image():
     # 이미지 파일 수신
     if 'image' not in request.files:
         return jsonify({"error": "No image provided"}), 400
-
+    
     file = request.files['image']
     img_array = np.frombuffer(file.read(), np.uint8)
     img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
@@ -857,20 +859,6 @@ def realtime_upload_image():
     os.makedirs(processed_folder_path, exist_ok=True)
     os.makedirs(cropped_images_path, exist_ok=True)
 
-    # 이미지 파일 목록 가져오기
-    pro_image_files = sorted([f for f in os.listdir(processed_folder_path) if f.endswith('.jpg')])
-    or_image_files = sorted([f for f in os.listdir(origin_folder_path) if f.endswith('.jpg')])
-
-    # 이미지 삭제(처리된 이미지)
-    for image_file in pro_image_files:
-        image_path = os.path.join(processed_folder_path, image_file)
-        os.remove(image_path)
-
-    # 이미지 삭제(원본 이미지)
-    for image_file in or_image_files:
-        image_path = os.path.join(origin_folder_path, image_file)
-        os.remove(image_path)
-
     cv2.imwrite(origin_filepath, img)
 
     # 이미지 파일 수 계산
@@ -886,12 +874,12 @@ def realtime_upload_image():
         # 새로운 스레드를 생성하여 백그라운드에서 스크립트를 실행
         threading.Thread(
             target=run_background_process,
-            args=(user_id, user_cam_folder_path, origin_folder_path)
+            args=(user_id, user_cam_folder_path, processed_folder_path)
         ).start()
         process_playing = True
 
 
-    if image_count % 6 == 0 and image_count % 150 != 0:
+    if image_count % 5 == 0 and image_count % 30 != 0:
         # 실시간 트래킹 처리
         person_detections = detect_objects(yolo_model, img, device)
         
@@ -908,20 +896,26 @@ def realtime_upload_image():
             if track_id not in active_track_ids:
                 del previous_tracks[track_id]
 
-        # 활성 트랙 갱신 및 트랙 상태 시각화
-        for track in tracker_outputs:
-            if not track.is_confirmed():
-                continue
+        # 바운딩 박스 정보를 저장할 텍스트 파일 경로
+        bbox_txt_file = os.path.join(processed_folder_path, "bbox_info.txt").replace("\\", "/")
+        # 텍스트 파일에 바운딩 박스 정보와 트랙 ID를 기록
+        with open(bbox_txt_file, 'a') as f:  # 'a' 모드로 열어 기존 내용에 추가
+            for track in tracker_outputs:
+                if not track.is_confirmed():
+                    continue
 
-            track_id = track.track_id
-            ltrb = track.to_ltrb()
-            track_bbox = (int(ltrb[0]), int(ltrb[1]), int(ltrb[2]), int(ltrb[3]))
+                track_id = track.track_id
+                ltrb = track.to_ltrb()
+                track_bbox = (int(ltrb[0]), int(ltrb[1]), int(ltrb[2]), int(ltrb[3]))
 
-            previous_tracks[track_id] = track_bbox
+                previous_tracks[track_id] = track_bbox
 
-            # 트래킹 결과를 이미지에 시각화
-            cv2.rectangle(img, (int(track_bbox[0]), int(track_bbox[1])), (int(track_bbox[2]), int(track_bbox[3])), (255, 0, 0), 2)
-            cv2.putText(img, f"Person ID: {track_id}", (int(track_bbox[0]), int(track_bbox[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                # 바운딩 박스와 track_id 정보를 텍스트 파일에 기록
+                f.write(f"{filename},{track_id},{track_bbox[0]},{track_bbox[1]},{track_bbox[2]},{track_bbox[3]}\n")
+
+                # 트래킹 결과를 이미지에 시각화
+                cv2.rectangle(img, (int(track_bbox[0]), int(track_bbox[1])), (int(track_bbox[2]), int(track_bbox[3])), (255, 0, 0), 2)
+                cv2.putText(img, f"Person ID: {track_id}", (int(track_bbox[0]), int(track_bbox[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
         # 결과 이미지를 다시 저장
         cv2.imwrite(processed_filepath, img)
@@ -934,7 +928,37 @@ def realtime_upload_image():
 
         print(f"Received and processed image from cam {cam_name} with shape: {img.shape} as {filename} / predictions : {predictions}")
         return jsonify({"message": "Image received and processed", "frame": image_base64, "person_data" : predictions}), 200
+    '''
+    if image_count % 6 == 0 and image_count % 150 != 0:
+        print("Process Start")
+        # 실시간 트래킹 처리
+        person_detections = detect_objects(yolo_model, img, device)
+        
+        results = []
+        for (xmin, ymin, xmax, ymax) in person_detections:
+            results.append([[xmin, ymin, xmax - xmin, ymax - ymin], 1.0, 0])
 
+        tracker_outputs = tracker.update_tracks(results, frame=img)
+
+        # 트래킹 결과를 이미지에 시각화
+        for track in tracker_outputs:
+            bbox = track.to_tlbr()
+            track_id = track.track_id
+            cv2.rectangle(img, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (255, 0, 0), 2)
+            cv2.putText(img, f"Person ID: {track_id}", (int(bbox[0]), int(bbox[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+
+        # 결과 이미지를 다시 저장
+        cv2.imwrite(processed_filepath, img)
+
+        # 결과 이미지를 Base64로 인코딩하여 클라이언트에 반환
+        _, buffer = cv2.imencode('.jpg', img)
+        image_base64 = base64.b64encode(buffer).decode('utf-8')
+
+        predictions = get_last_line_from_txt(output_txt_path)
+
+        print(f"Received and processed image from cam {cam_name} with shape: {img.shape} as {filename} / predictions : {predictions}")
+        return jsonify({"message": "Image received and processed", "frame": image_base64, "person_data" : predictions}), 200
+    '''
     if image_count % 150 == 0 and image_count != 0:
         # 결과 이미지를 Base64로 인코딩하여 클라이언트에 반환
         _, buffer = cv2.imencode('.jpg', img)
@@ -1042,7 +1066,11 @@ def realtime_upload_image_end():
 
     # 합쳐진 비디오 작성 완료
     print(f"Combined video created at {processed_video_path}")
+    
+    start_time = convert_filename_to_datetime(or_image_files[0])
 
+    save_video_to_db(user_no, cam_num, start_time, origin_video_path, processed_video_path, output_txt_path, processed_log_txt_path, cropped_images_path)
+    
     # 이미지 삭제(처리된 이미지)
     for image_file in pro_image_files:
         image_path = os.path.join(processed_folder_path, image_file)
@@ -1052,11 +1080,7 @@ def realtime_upload_image_end():
     for image_file in or_image_files:
         image_path = os.path.join(origin_folder_path, image_file)
         os.remove(image_path)
-    
-    start_time = convert_filename_to_datetime(or_image_files[0])
 
-    save_video_to_db(user_no, cam_num, start_time, origin_video_path, processed_video_path, output_txt_path, processed_log_txt_path, cropped_images_path)
-    
     print(f"Received and saved image from cam {cam_name} End")
 
     return jsonify({"message": "Image received and saved"}), 200
@@ -1163,8 +1187,8 @@ def realtime_search_previous_analysis_result_logs():
 
     return jsonify({"message": "Analysis results successfully search logs", "logs" : processed_data}), 200
 
-# 8. 이전 분석 결과 삭제 (Post)
-@app.route('/realtime_delete_previous_analysis_result', methods=['POST'])
+# 9. 이전 분석 결과 삭제 (Post)
+@app.route('/realtime_delete_previous_analysis_result', methods=['DELETE'])
 def realtime_delete_previous_analysis_result():
     data = request.get_json()
 
