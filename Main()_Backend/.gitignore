@@ -246,4 +246,8 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+# models files
+
+models/
+
 # End of https://www.toptal.com/developers/gitignore/api/windows,python,visualstudiocode,react

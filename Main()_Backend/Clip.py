@@ -11,9 +11,30 @@ def get_db_connection():
         host='localhost',
         user='root',
         password='1234',
-        database='wb39_project3',
+        database='wb39_project4',
         cursorclass=pymysql.cursors.DictCursor
     )
+#or_video_id를 통해 cam_num을 가져오는 함수를 추가합니다.
+def get_cam_num_by_or_video_id(or_video_id):
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            sql = """
+                SELECT cam_num
+                FROM origin_video
+                WHERE or_video_id = %s
+            """
+            cursor.execute(sql, (or_video_id,))
+            result = cursor.fetchone()
+            if result:
+                return result['cam_num']
+            else:
+                raise ValueError(f"No cam_num found for or_video_id: {or_video_id}")
+    except pymysql.MySQLError as e:
+        print(f"MySQL error occurred: {str(e)}")
+        return None
+    finally:
+        connection.close()
 
 # user_no, video_name 기반 filter_id 조회
 def get_or_video_id_by_video_name_and_user_id_and_filter_id(video_name, user_no, filter_id):
@@ -143,8 +164,8 @@ def process_video_clips(video_paths, user_id, filter_id, clip_times, personid):
             if not ret:
                 break
 
-            lower_blue = np.array([0, 255, 0], dtype=np.uint8)
-            upper_blue = np.array([0, 255, 0], dtype=np.uint8)
+            lower_blue = np.array([0, 0, 255], dtype=np.uint8)
+            upper_blue = np.array([0, 0, 255], dtype=np.uint8)
             mask = cv2.inRange(frame, lower_blue, upper_blue)
             blue_pixel_count = cv2.countNonZero(mask)
 
@@ -219,6 +240,7 @@ def save_clips_to_db(clip_times, video_person_mapping):
                 filter_id = clip_info['filter_id']
                 for or_video_id in get_or_video_id_by_video_name_and_user_id_and_filter_id(clip_info['video_label'], user_no, filter_id):
                     person_no = get_person_no(clip_info['person_id'], or_video_id, filter_id)
+                    cam_num = get_cam_num_by_or_video_id(or_video_id)
 
                     if person_no is None:
                         print(f"No person_no found for person_id: {clip_info['person_id']} and or_video_id: {or_video_id}")
@@ -227,20 +249,21 @@ def save_clips_to_db(clip_times, video_person_mapping):
                     sql_check = """
                         SELECT COUNT(*) as count 
                         FROM clip 
-                        WHERE person_no = %s AND clip_video = %s AND clip_time = %s
+                        WHERE person_no = %s AND clip_video = %s AND clip_time = %s AND cam_num = %s
                     """
-                    cursor.execute(sql_check, (person_no, clip_info['clip_file'], clip_info['start_time']))
+                    cursor.execute(sql_check, (person_no, clip_info['clip_file'], clip_info['start_time'], cam_num))
                     count = cursor.fetchone()['count']
                     
                     if count == 0:
                         sql = """
-                            INSERT INTO clip (person_no, clip_video, clip_time)
-                            VALUES (%s, %s, %s)
+                            INSERT INTO clip (person_no, clip_video, clip_time, cam_num)
+                            VALUES (%s, %s, %s, %s)
                         """
                         cursor.execute(sql, (
                             person_no,
                             clip_info['clip_file'],
-                            clip_info['start_time']
+                            clip_info['start_time'],
+                            cam_num
                         ))
                     else:
                         print(f"Clip already exists: {clip_info['clip_file']} at {clip_info['start_time']} for person_no {person_no}")

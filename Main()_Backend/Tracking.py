@@ -1,4 +1,3 @@
-#다중 트래킹 처리 (이미지 없을 때)
 import cv2
 import sys
 import os
@@ -9,17 +8,18 @@ from ultralytics import YOLO
 from PIL import Image
 from deep_sort_realtime.deepsort_tracker import DeepSort
 from age_model import ResNetAgeModel, device, test_transform
+import subprocess
 
 class FaceRecognizer:
     def __init__(self, device=None):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') if device is None else device
         self.mtcnn = MTCNN(keep_all=True, post_process=False, device=self.device)
         self.resnet = InceptionResnetV1(pretrained='vggface2').eval().to(self.device)
-        self.tracked_faces = {}     # 트랙 ID를 키로, face_id 리스트를 값으로 가지는 딕셔너리
-        self.previous_tracks = {}   # 이전 트랙 정보를 저장
-        self.known_faces = {}       # 얼굴 ID를 키로, (트랙 ID, 얼굴 임베딩)을 값으로 가지는 딕셔너리
-        self.inactive_faces = {}    # 비활성화된 얼굴 ID를 임시 저장
-        self.assigned_ids = set()   # 현재 사용 중인 face_id를 추적
+        self.tracked_faces = {}
+        self.previous_tracks = {}
+        self.known_faces = {}
+        self.inactive_faces = {}
+        self.assigned_ids = set()
 
     def extract_embeddings(self, image):
         print("Extracting embeddings...")
@@ -71,17 +71,18 @@ class FaceRecognizer:
         x1, y1, x2, y2 = bbox1
         x3, y3, x4, y4 = bbox2
 
-        xi1 = max(x1, x3)
-        yi1 = max(y1, y3)
-        xi2 = min(x2, x4)
-        yi2 = min(y2, y4)
+        xi1 = max(x1, x3)  # 교차하는 부분의 좌측 상단 x 좌표
+        yi1 = max(y1, y3)  # 교차하는 부분의 좌측 상단 y 좌표
+        xi2 = min(x2, x4)  # 교차하는 부분의 우측 하단 x 좌표
+        yi2 = min(y2, y4)  # 교차하는 부분의 좌측 상단 y 좌표
 
-        inter_area = max(0, xi2 - xi1) * max(0, yi2 - yi1)
-        bbox1_area = (x2 - x1) * (y2 - y1)
-        bbox2_area = (x4 - x3) * (y4 - y3)
+        inter_area = max(0, xi2 - xi1) * max(0, yi2 - yi1)  # 교차하는 부분의 넓이 계산
+        bbox1_area = (x2 - x1) * (y2 - y1)  # bbox1의 넓이 계산
+        bbox2_area = (x4 - x3) * (y4 - y3)  # bbox2의 넓이 계산
 
-        iou = inter_area / float(bbox1_area + bbox2_area - inter_area)
-        overlap_coords = (xi1, yi1, xi2, yi2)
+        iou = inter_area / float(bbox1_area + bbox2_area - inter_area)  # IoU 계산
+
+        overlap_coords = (xi1, yi1, xi2, yi2)  # 교차하는 부분의 좌표
 
         return iou, overlap_coords
 
@@ -103,26 +104,41 @@ class FaceRecognizer:
                 print("No matching face ID found.")
         return None
 
-    def detect_persons(self, frame, yolo_model):
+    def detect_persons(self, frame, yolo_model, min_width=60, min_height=60):
         print("Detecting persons...")
-        yolo_results = yolo_model.predict(source=[frame], save=False)[0]
-        person_detections = [
-            (int(data[0]), int(data[1]), int(data[2]), int(data[3]))
-            for data in yolo_results.boxes.data.tolist()
-            if float(data[4]) >= 0.85 and int(data[5]) == 0
-        ]
+        yolo_results = yolo_model.predict(source=[frame], save=False, classes=[0])[0]
+        person_detections = []
+        for data in yolo_results.boxes.data.tolist():
+            xmin, ymin, xmax, ymax, conf, cls = int(data[0]), int(data[1]), int(data[2]), int(data[3]), float(data[4]), int(data[5])
+        
+            if conf >= 0.85 and cls == 0: 
+                width = xmax - xmin
+                height = ymax - ymin
+
+                if width >= min_width and height >= min_height:
+                    person_detections.append((xmin, ymin, xmax, ymax))
+
         print(f"Persons detected: {len(person_detections)}")
         return person_detections
 
-    def draw_bounding_boxes(self, frame, tracks, tracked_faces):
+    def draw_bounding_boxes(self, frame, tracks, tracked_faces, face_flag, image_name):
         print("Drawing bounding boxes...")
         for track_id, bbox in self.previous_tracks.items():
             if track_id in tracked_faces:
-                face_ids = tracked_faces[track_id]
-                cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
-                #cv2.putText(frame, face_ids, (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                if face_flag == 'true':
+                    cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 0, 255), 2)
+                    cv2.putText(frame, f"person_ID : {image_name}", (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                else:
+                    face_ids = tracked_faces[track_id]
+                    person_id = face_ids.split('_')[1]
+                    cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 0, 255), 2)
+                    cv2.putText(frame, f"person_ID : {person_id}", (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        for track_id, bbox in self.previous_tracks.items():
+            if track_id not in tracked_faces:
+                cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 0, 0), 2)
+                cv2.putText(frame, f"track_ID : {str(track_id)}", (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
-    def recognize_faces(self, frame, frame_number, output_dir, known_faces, tracker, video_name, yolo_model, gender_model, age_model):
+    def recognize_faces(self, frame, frame_number, output_dir, known_faces, tracker, video_name, yolo_model, gender_model, age_model, face_flag, image_name):
         if frame is None:
             print(f"Warning: Frame {frame_number} is None.")
             return frame
@@ -140,6 +156,11 @@ class FaceRecognizer:
         tracks = tracker.update_tracks(results, frame=frame)
         print(f"Tracks updated: {len(tracks)}")
 
+        for track_id in list(self.previous_tracks.keys()):
+            bbox = self.previous_tracks[track_id]
+            if bbox[0] < 0 or bbox[1] < 0 or bbox[2] > frame.shape[1] or bbox[3] > frame.shape[0]:
+                del self.previous_tracks[track_id]
+
         active_track_ids = {track.track_id for track in tracks if track.is_confirmed()}
         inactive_track_ids = set(self.tracked_faces.keys()) - active_track_ids
 
@@ -152,6 +173,10 @@ class FaceRecognizer:
                 del self.known_faces[face_id]
             del self.tracked_faces[inactive_track_id]
 
+        for track_id in list(self.previous_tracks.keys()):
+            if track_id not in active_track_ids:
+                del self.previous_tracks[track_id]
+
         for track in tracks:
             if not track.is_confirmed():
                 continue
@@ -159,6 +184,8 @@ class FaceRecognizer:
             track_id = track.track_id
             ltrb = track.to_ltrb()
             track_bbox = (int(ltrb[0]), int(ltrb[1]), int(ltrb[2]), int(ltrb[3]))
+
+            cv2.rectangle(frame, (track_bbox[0], track_bbox[1]), (track_bbox[2], track_bbox[3]), (255, 0, 0), 2)
 
             for embedding, box in detect_faces:
                 left, top, right, bottom = box
@@ -206,20 +233,7 @@ class FaceRecognizer:
                 print(f"Warning: Extracted face image is None or empty for track {track_id}.")
                 continue
 
-            try:
-                gender = predict_gender(face_image, gender_model)
-                print(f"Predicted Gender: {gender}")
-            except Exception as e:
-                print(f"Error predicting gender for track {track_id}: {e}")
-                gender = "Unknown"
-
-            if track_id in self.tracked_faces:
-                face_id = self.tracked_faces[track_id]
-                id_text = f"face_id: {face_id}"
-                cv2.rectangle(frame, (track_bbox[0], track_bbox[1]), (track_bbox[2], track_bbox[3]), (0, 255, 0), 2)
-                #cv2.putText(frame, id_text, (track_bbox[0], track_bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-        self.draw_bounding_boxes(frame, tracks, self.tracked_faces)
+        self.draw_bounding_boxes(frame, tracks, self.tracked_faces, face_flag, image_name)
         print(f"Frame {frame_number} processed.")
 
         return frame
@@ -240,7 +254,15 @@ def predict_gender(face_image, gender_model):
     gender_id = results[0].boxes.data[0][5].item()
     return genders.get(gender_id, "Unknown")
 
-def process_video(video_path, output_dir, known_face_paths, yolo_model_path, gender_model_path, age_model_path, person_id, interval=3, target_fps=1):
+# H.264 코덱으로 재인코딩하는 함수
+def reencode_video(input_path, output_path):
+    command = [
+        'ffmpeg', '-i', input_path, '-c:v', 'libx264', '-b:v', '2000k',
+        '-c:a', 'aac', '-b:a', '128k', output_path
+    ]
+    subprocess.run(command, check=True)
+
+def process_video(video_path, output_dir, known_face_paths, yolo_model_path, gender_model_path, age_model_path, person_id, face_flag, image_name, interval=3, target_fps=1):
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     recognizer = FaceRecognizer()
 
@@ -265,6 +287,7 @@ def process_video(video_path, output_dir, known_face_paths, yolo_model_path, gen
     tracker = DeepSort(max_age=max_age, n_init=2, nn_budget=nn_budget)
 
     frame_number = 0
+    temp_video_path = os.path.join(output_dir, f"{video_name}_clip", f"{video_name}_temp_output.mp4")
 
     while True:
         success, frame = v_cap.read()
@@ -274,30 +297,32 @@ def process_video(video_path, output_dir, known_face_paths, yolo_model_path, gen
         frame_number += 1
 
         if frame_number % interval == 0:
-            frame = recognizer.recognize_faces(frame, frame_number, output_dir, known_faces, tracker, video_name, yolo_model, gender_model, age_model)
+            frame = recognizer.recognize_faces(frame, frame_number, output_dir, known_faces, tracker, video_name, yolo_model, gender_model, age_model, face_flag, image_name)
         else:
-            recognizer.draw_bounding_boxes(frame, [], recognizer.tracked_faces)
+            recognizer.draw_bounding_boxes(frame, [], recognizer.tracked_faces, face_flag, image_name)
         
         if frame_width is None or frame_height is None:
             frame_height, frame_width = frame.shape[:2]
-            output_video_path = os.path.join(output_dir, f"{video_name}_clip", f"{video_name}_output.mp4")
-            os.makedirs(os.path.dirname(output_video_path), exist_ok=True)
-            video_writer = cv2.VideoWriter(output_video_path, cv2.VideoWriter_fourcc(*'mp4v'), frame_rate, (frame_width, frame_height))
+            os.makedirs(os.path.dirname(temp_video_path), exist_ok=True)
+            video_writer = cv2.VideoWriter(temp_video_path, cv2.VideoWriter_fourcc(*'mp4v'), frame_rate, (frame_width, frame_height))
 
         if video_writer:
             video_writer.write(frame)
-
-        #cv2.imshow('Processed Frame', frame)
-
-        #if cv2.waitKey(1) & 0xFF == ord('q'):
-            #break
 
     v_cap.release()
     if video_writer:
         video_writer.release()
     cv2.destroyAllWindows()
 
-def process_videos(video_directory, output_dir, known_face_paths, yolo_model_path, gender_model_path, age_model_path, interval, video_name=None, target_fps=10):
+    # Reencode the video using H.264 codec
+    output_video_path = os.path.join(output_dir, f"{video_name}_clip", f"{video_name}_output.mp4")
+    reencode_video(temp_video_path, output_video_path)
+
+    # Remove the temporary file
+    if os.path.exists(temp_video_path):
+        os.remove(temp_video_path)
+
+def process_videos(video_directory, output_dir, known_face_paths, yolo_model_path, gender_model_path, age_model_path, interval, face_flag, image_name, video_name=None, target_fps=10):
     video_paths = [os.path.join(video_directory, file) for file in os.listdir(video_directory) if file.endswith(('.mp4', '.avi', '.mov'))]
     
     if video_name:
@@ -347,16 +372,19 @@ def process_videos(video_directory, output_dir, known_face_paths, yolo_model_pat
         if matched_faces:
             print(f"Matched faces: {matched_faces}")
             combined_face_ids = ','.join(matched_faces)
-            process_video(video_path, output_dir, all_known_face_paths, yolo_model_path, gender_model_path, age_model_path, combined_face_ids, interval, target_fps)
+            process_video(video_path, output_dir, all_known_face_paths, yolo_model_path, gender_model_path, age_model_path, combined_face_ids, face_flag, image_name, interval, target_fps)
             break
 
 if __name__ == "__main__":
     try:
-        video_name = sys.argv[1]  # 여기에서 video_name 인수를 가져옴
+        video_name = sys.argv[1]
         user_id = sys.argv[2]
         filter_id = sys.argv[3]
         known_face_paths_str = sys.argv[4]
-        known_face_paths = known_face_paths_str.split(',')  # 쉼표로 분리하여 리스트로 변환
+        image_name = sys.argv[5]
+        face_flag = sys.argv[6].lower()
+
+        known_face_paths = known_face_paths_str.split(',')
         video_directory = f"./uploaded_videos/{user_id}/"
 
         output_directory = f"./extracted_images/{user_id}/filter_{filter_id}"
@@ -365,7 +393,8 @@ if __name__ == "__main__":
         age_model_path = './models/age_best.pth'
 
         interval = 3
-        process_videos(video_directory, output_directory, known_face_paths, yolo_model_path, gender_model_path, age_model_path, interval, video_name=video_name)
+        process_videos(video_directory, output_directory, known_face_paths, yolo_model_path, gender_model_path, age_model_path, interval, face_flag, image_name, video_name=video_name)
+
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
