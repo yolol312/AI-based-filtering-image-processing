@@ -1,0 +1,49 @@
+.UploadSwap {
+  padding: 20px;
+  background-color: #000; /* 배경색을 검정으로 변경 */
+  color: #fff; /* 텍스트 색상을 흰색으로 변경 */
+  width: 100%;
+  height: 100vh; /* 화면 전체를 차지하도록 높이 설정 */
+  display: flex;
+  justify-content: flex-start; /* 위쪽으로 정렬 */
+  align-items: center;
+  flex-direction: column;
+  padding-top: 100px; /* 위쪽 여백을 추가하여 위치 조정 */
+}
+
+.upload-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px; /* 두 박스 사이의 간격 */
+}
+
+.upload-box {
+  text-align: center;
+  width: 400px; /* 박스 너비 */
+  padding: 20px; /* 테두리와 내용 간 여백 */
+  border-radius: 10px; /* 모서리를 둥글게 */
+}
+
+.upload-button {
+  background-color: transparent;
+  border: 2px solid #fff;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 5px;
+  font-size: 20px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.upload-button:hover {
+  background-color: #fff;
+  color: #000;
+}
+
+.upload-box p {
+  margin-top: 15px;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #ccc; /* 텍스트 색상을 약간 밝은 회색으로 설정 */
+}

@@ -5,20 +5,33 @@
   font-style: normal;
 }
 
-/* Sidebar 전체 스타일 */
-.SidebarLeft {
+/* RealTimeSidebarLeft 전체 스타일 */
+.RealTimeSidebarLeft {
   width: 25%;
-  height: 120vh;
+  height: 105vh;
   padding: 8px;
   overflow-y: auto;
   background-color: #000000;
   font-family: "NanumSquareNeo", sans-serif; /* 폰트 적용 */
   color: #ffffff;
-  border-top: 1px solid white;
-  border-right: 1px solid white;
-  border-left: 1px solid white;
-  border-bottom: 1px solid white;
-  z-index: 5;
+  border: 1px solid white;
+  position: relative;
+  z-index: 6;
+}
+
+.upload-button {
+  background-color: transparent;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 5px;
+  font-size: 15px;
+  cursor: pointer;
+  font-family: "NanumSquareNeo", sans-serif; /* 폰트 적용 */
+}
+
+.upload-button:hover {
+  background-color: #fff;
+  color: #000;
 }
 
 /* 제목 스타일 */
@@ -51,13 +64,13 @@
 
 .video-button:hover {
   background-color: white;
-  color: #000000; /* 호버 시 텍스트 색상 변경 */
+  color: #007bff;
 }
 
 /* 선택된 비디오 버튼 스타일 */
 .video-button.selected {
   background-color: white;
-  color: #000000; /* 선택된 버튼 텍스트 색상 변경 */
+  color: #007bff;
 }
 
 /* TreeView 스타일 */
@@ -80,6 +93,54 @@
   font-family: "NanumSquareNeo", sans-serif; /* 폰트 적용 */
 }
 
-.tree-item:hover {
-  background-color: #444444; /* 호버 시 배경색 변경 */
+/* 정보 카드와 이미지 스타일 */
+.info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background-color: black;
+  font-family: "NanumSquareNeo", sans-serif; /* 폰트 적용 */
+}
+
+.info-card {
+  display: flex;
+  padding: 10px;
+  background-color: #222;
+  color: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: "NanumSquareNeo", sans-serif; /* 폰트 적용 */
+}
+
+.image-placeholder {
+  width: 80px;
+  height: 80px;
+  background-color: white;
+  margin-right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.image-placeholder img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.info-text p {
+  margin: 0;
+  font-family: "NanumSquareNeo", sans-serif; /* 폰트 적용 */
+}
+
+.sidebar-title {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 20px;
+  color: #ffffff;
+  text-align: center;
+  font-family: "NanumSquareNeo", sans-serif; /* 폰트 적용 */
 }

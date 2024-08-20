@@ -1,0 +1,158 @@
+.prev-video-container {
+  display: flex;
+  height: 100%;
+  z-index: 99;
+}
+
+.prev-video-sidebar {
+  width: 40%;
+  background-color: #2d2d2d;
+  padding: 10px;
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  overflow-y: auto;
+}
+
+.prev-video-tree {
+  width: 40%;
+  height: 200%;
+  background-color: #3b3b3b;
+  padding: 10px;
+  border-radius: 8px;
+  color: white;
+}
+
+.prev-video-tree ul {
+  list-style-type: none;
+  padding-left: 10px;
+}
+
+.prev-video-tree ul ul {
+  padding-left: 20px;
+}
+
+.prev-video-records {
+  width: 70%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: white;
+}
+
+.prev-video-record {
+  background-color: #444;
+  border: 1px solid #555;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  align-items: center;
+}
+
+.prev-video-thumbnail {
+  width: 60px;
+  height: 60px;
+  background-color: #888;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+}
+
+.prev-video-details {
+  color: white;
+  flex-grow: 1;
+}
+
+.prev-video-details p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.prev-video-main {
+  width: 60%;
+  padding: 10px;
+}
+
+.prev-video-player {
+  width: 100%;
+  height: auto;
+  border: 1px solid #888;
+  border-radius: 8px;
+}
+
+.video-title {
+  color: white;
+  padding: 5px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s, color 0.3s; /* 애니메이션 추가 */
+}
+
+.video-title:hover {
+  background-color: #555; /* 마우스를 올렸을 때 배경 색상 변경 */
+  color: #ddd; /* 텍스트 색상 변경 */
+}
+
+.video-title:active,
+.video-title:focus {
+  background-color: #777; /* 클릭되었을 때 배경 색상 변경 */
+  color: #fff; /* 텍스트 색상 변경 */
+}
+
+.log-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.log-row {
+  display: flex;
+  flex-wrap: wrap;
+  background-color: #444;
+  border: 1px solid #555;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.log-cell {
+  flex: 1 1 50%; /* 50% width */
+  margin-bottom: 5px;
+}
+
+.delete-button {
+  background-color: transparent;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 5px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.delete-button:hover {
+  background-color: #fff;
+  color: #000;
+}
+
+.camera-title {
+  color: white;
+  padding: 5px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s, color 0.3s; /* 애니메이션 추가 */
+}
+
+.camera-title:hover {
+  background-color: #555; /* 마우스를 올렸을 때 배경 색상 변경 */
+  color: #ddd; /* 텍스트 색상 변경 */
+}
+
+.camera-title:active,
+.camera-title:focus {
+  background-color: #777; /* 클릭되었을 때 배경 색상 변경 */
+  color: #fff; /* 텍스트 색상 변경 */
+}

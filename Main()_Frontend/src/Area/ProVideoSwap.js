@@ -1,31 +1,96 @@
-import React, { useEffect, useRef } from 'react';
-import './ProVideoSwap.css';
+import React, { useRef, useState } from "react";
+import ReactPlayer from "react-player";
+import "./ProVideoSwap.css";
 
-function ProVideoSwap({ personData, videoUrl }) {
-  const videoRef = useRef();
+const ProVideoSwap = ({ videoUrls = [] }) => {
+  const playerRefs = [useRef(null), useRef(null), useRef(null), useRef(null)];
+  const [playing, setPlaying] = useState(false);
+  const [played, setPlayed] = useState(0);
+  const [selectedVideo, setSelectedVideo] = useState(null);
 
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.load(); // URL 변경 시 비디오 리로드
+  const togglePlayPause = () => {
+    setPlaying(!playing);
+  };
+
+  const handleProgress = (state) => {
+    if (playing) {
+      setPlayed(state.played);
     }
-  }, [videoUrl]);
+  };
 
-  if (!videoUrl) {
-    return <p>비디오 URL이 없습니다.</p>;
-  }
+  const handleSeek = (e) => {
+    const newTime = parseFloat(e.target.value);
+    setPlayed(newTime);
+    playerRefs.forEach((ref) => {
+      if (ref.current) {
+        ref.current.seekTo(newTime);
+      }
+    });
+  };
 
-  if (!personData || personData.length === 0) {
-    return <p>선택된 비디오에 대한 인물 정보가 없습니다.</p>;
-  }
+  const handleVideoClick = (index) => {
+    setSelectedVideo(index);
+  };
+
+  const handleBackToGrid = () => {
+    setSelectedVideo(null);
+  };
 
   return (
-    <div className="ProVideoSwap">
-      <video ref={videoRef} controls>
-        <source src={videoUrl} type="video/mp4" />
-        비디오를 재생할 수 없습니다.
-      </video>
+    <div>
+      {selectedVideo === null ? (
+        <div className="video-grid">
+          {videoUrls.slice(0, 4).map((url, index) => (
+            <div key={index} onClick={() => handleVideoClick(index)}>
+              <ReactPlayer
+                ref={playerRefs[index]}
+                url={url}
+                playing={playing}
+                controls={false}
+                width="100%"
+                height="100%"
+                onProgress={handleProgress}
+              />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="video-fullscreen" onClick={handleBackToGrid}>
+          <ReactPlayer
+            ref={playerRefs[selectedVideo]}
+            url={videoUrls[selectedVideo]}
+            playing={playing}
+            controls={true}
+            width="100%"
+            height="100%"
+            onProgress={handleProgress}
+          />
+        </div>
+      )}
+      <div className="controls">
+        <div
+          className="thumbnail-bar"
+          style={{
+            backgroundImage: "url(/combined_thumbnail.jpg)",
+            backgroundSize: "cover",
+          }}
+        >
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step="any"
+            value={played}
+            onChange={handleSeek}
+            className="seek-bar"
+          />
+        </div>
+        <button onClick={togglePlayPause} className="control-button">
+          {playing ? "||" : "▶"}
+        </button>
+      </div>
     </div>
   );
-}
+};
 
 export default ProVideoSwap;

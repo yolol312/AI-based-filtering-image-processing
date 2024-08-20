@@ -1,29 +1,29 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect } from "react";
 
 const MapDataContext = createContext();
 
 const MapDataProvider = ({ children }) => {
   const [MapInfo, setMapInfo] = useState(() => {
-    const savedData = localStorage.getItem('MapInfo');
+    const savedData = localStorage.getItem("MapInfo");
     return savedData
       ? JSON.parse(savedData)
       : {
           order_data: [],
           radius: 0,
-          last_camera_name: '',
+          last_camera_name: "",
           last_camera_latitude: 0,
           last_camera_longitude: 0,
-          address: '',
+          address: "",
         };
   });
   const [triggerRouteAnimation, setTriggerRouteAnimation] = useState(false);
 
   useEffect(() => {
-    console.log('MapDataContext에 저장된 데이터:', MapInfo);
+    // console.log('MapDataContext에 저장된 데이터:', MapInfo);
   }, [MapInfo]);
 
   useEffect(() => {
-    localStorage.setItem('MapInfo', JSON.stringify(MapInfo));
+    localStorage.setItem("MapInfo", JSON.stringify(MapInfo));
   }, [MapInfo]);
 
   const updateMapInfo = (newMapInfo) => {
@@ -35,10 +35,10 @@ const MapDataProvider = ({ children }) => {
     setMapInfo({
       order_data: [],
       radius: 0,
-      last_camera_name: '',
+      last_camera_name: "",
       last_camera_latitude: 0,
       last_camera_longitude: 0,
-      address: '',
+      address: "",
     });
   };
 
@@ -50,10 +50,10 @@ const MapDataProvider = ({ children }) => {
     return (
       MapInfo.order_data.length === 0 &&
       MapInfo.radius === 0 &&
-      MapInfo.last_camera_name === '' &&
+      MapInfo.last_camera_name === "" &&
       MapInfo.last_camera_latitude === 0 &&
       MapInfo.last_camera_longitude === 0 &&
-      MapInfo.address === ''
+      MapInfo.address === ""
     );
   };
 

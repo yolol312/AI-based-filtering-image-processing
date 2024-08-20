@@ -1,6 +1,17 @@
 /* App.css */
+/* H */
+
+@font-face {
+  font-family: "NanumSquareNeo";
+  src: url("./fonts/NanumSquareNeo-aLt.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
 
 .Main {
   display: flex;
   height: 100vh;
+  background-color: black;
+  font-family: "NanumSquareNeo", sans-serif;
+  color: white; /* 폰트가 잘 보이도록 텍스트 색상 설정 */
 }

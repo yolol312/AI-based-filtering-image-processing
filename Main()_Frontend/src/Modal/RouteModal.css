@@ -1,40 +1,39 @@
-/* MapModal.css */
-
-.Map-modal-overlay {
+.RouteModal-overlay {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: auto;
+  width: 100vw; /* 화면 너비를 가득 채우도록 설정 */
+  height: 100vh; /* 화면 높이를 가득 채우도록 설정 */
   background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 7;
+  z-index: 5;
 }
 
-.Map-modal-content {
+.RouteModal-content {
   background: #333;
   border-radius: 8px;
-  position: relative;
-  width: 67%;
-  height: 77%;
+  width: 95vw; /* 모달의 너비를 화면의 95%로 설정 */
+  height: 95vh; /* 모달의 높이를 화면의 95%로 설정 */
   display: flex;
   flex-direction: column;
-  border-top: 1px solid white; /* 테두리 색상을 흰색으로 변경 */
-  border-right: 1px solid white; /* 테두리 색상을 흰색으로 변경 */
-  border-left: 1px solid white; /* 테두리 색상을 흰색으로 변경 */
-  border-bottom: 1px solid white; /* 테두리 색상을 흰색으로 변경 */
+  border: 1px solid white; /* 테두리 색상을 흰색으로 유지 */
+  overflow: hidden; /* 모달 내부의 내용이 넘치지 않도록 설정 */
 }
 
-.Map-modal-body {
+.RouteModal-body {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden; /* 스크롤을 제거하여 지도가 전체를 차지하도록 설정 */
   padding: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%; /* 모달 내부를 꽉 채우도록 설정 */
 }
 
 /*완료 버튼*/
-.Map-modal-button-close {
+.RouteModal-button-close {
   padding: 10px 20px;
   font-size: 16px;
   border: none;
@@ -44,13 +43,8 @@
   color: white;
 }
 
-.Map-modal-content h2 {
-  color: white; /* 텍스트 색상을 흰색으로 변경 */
-  margin: 0; /* 기본 마진 제거 */
-  font-size: 20px; /* 글씨 크기 조정 (필요에 따라 수정 가능) */
-}
 
-.Map-modal-top {
+.RouteModal-top {
   border-bottom: 1px solid #ddd;
   display: flex;
   align-items: center; /* 닫기 버튼과 높이 맞추기 */
@@ -60,18 +54,18 @@
   position: relative; /* 닫기 버튼 위치를 위한 상대 위치 지정 */
 }
 
-.Map-modal-button-close:hover {
+.RouteModal-button-close:hover {
   opacity: 0.7; /* 불투명도를 80%로 변경 */
 }
 
-.Map-modal-button:disabled {
+.RouteModal-button:disabled {
   background-color: #c0c0c0;
   cursor: not-allowed;
 }
 
-.Map-modal-button-simple-close {
+.RouteModal-button-simple-close {
   position: absolute;
-  top: 8px;
+  top: 0px;
   width: 5%;
   right: 20px;
   height: 40px;
@@ -84,6 +78,6 @@
   color: white;
 }
 
-.Map-modal-button-simple-close:hover {
+.RouteModal-button-simple-close:hover {
   background-color: red;
 }

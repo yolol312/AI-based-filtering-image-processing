@@ -16,7 +16,6 @@ from moviepy.editor import VideoFileClip
 import json
 import time
 from datetime import datetime, timedelta
-import bcrypt
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'

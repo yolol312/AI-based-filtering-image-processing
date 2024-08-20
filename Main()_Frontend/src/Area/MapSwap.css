@@ -1,57 +1,98 @@
+@font-face {
+  font-family: "NanumSquareNeo";
+  src: url("../fonts/NanumSquareNeo-aLt.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
 /* MapSwap 전체 스타일 */
 .MapSwap {
   padding: 20px;
-  background-color: #f9f9f9; /* 연한 회색 배경 */
-  border: 1px solid #ddd; /* 연한 회색 경계선 */
-  border-radius: 5px; /* 둥근 모서리 */
-  width: 100%; /* 전체 너비 */
-  overflow-y: auto; /* 세로 스크롤 가능 */
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* 부드러운 그림자 */
-  font-family: Arial, sans-serif; /* 기본 글꼴 */
+  background-color: black;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  width: 100%;
+  height: 100vh;
+  box-sizing: border-box;
+  overflow-y: auto;
+  font-family: "NanumSquareNeo", sans-serif; /* 폰트 적용 */
+}
+
+/* 헤더 스타일 */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  font-family: "NanumSquareNeo", sans-serif; /* 폰트 적용 */
 }
 
 /* 제목 스타일 */
 .title {
-  font-size: 24px; /* 큰 글꼴 크기 */
-  font-weight: bold; /* 두꺼운 글씨 */
-  color: #333; /* 어두운 회색 텍스트 색상 */
-  margin-bottom: 15px; /* 제목과 내용 사이의 여백 */
-  border-bottom: 2px solid #007bff; /* 제목 아래 파란색 선 추가 */
-  padding-bottom: 5px; /* 제목 아래 패딩 추가 */
+  font-size: 24px;
+  font-weight: bold;
+  color: white;
+  border-bottom: 2px solid white;
+  padding-bottom: 5px;
+  margin: 0;
+  font-family: "NanumSquareNeo", sans-serif; /* 폰트 적용 */
 }
 
-/* 지도 정보 스타일 */
-.map-info {
-  line-height: 1.6; /* 줄 간격 */
-  color: #555; /* 중간 회색 텍스트 색상 */
-  background-color: #fff; /* 흰색 배경 */
-  padding: 10px; /* 내부 패딩 */
-  border-radius: 3px; /* 둥근 모서리 */
-  border: 1px solid #ddd; /* 연한 회색 경계선 */
-  margin-bottom: 20px; /* 다른 요소와의 여백 */
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* 부드러운 그림자 */
+/* 버튼 스타일 */
+.edit-button {
+  padding: 10px 20px;
+  font-size: 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: white;
+  border: 1px solid #fff;
+  color: black;
+  width: 150px;
+  font-family: "NanumSquareNeo", sans-serif; /* 폰트 적용 */
 }
 
-/* 지도 정보의 첫 번째 단락 스타일 */
-.map-info p:first-child {
-  font-weight: bold; /* 첫 번째 단락을 두껍게 */
-  color: #333; /* 어두운 회색 텍스트 색상 */
+/* 버튼 스타일 */
+.delete-button {
+  padding: 10px 20px;
+  font-size: 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: red;
+  border: 1px solid black;
+  color: white;
+  width: 150px;
+  font-family: "NanumSquareNeo", sans-serif; /* 폰트 적용 */
 }
 
-/* 지도 정보 단락 스타일 */
-.map-info p {
-  margin: 0; /* 단락 간 여백 제거 */
-  padding: 5px 0; /* 단락 패딩 */
-  border-bottom: 1px solid #eee; /* 단락 아래 연한 회색 선 추가 */
+/* 지도와 정보 컨테이너 스타일 */
+.map-and-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  height: calc(100% - 50px);
+  font-family: "NanumSquareNeo", sans-serif; /* 폰트 적용 */
 }
 
 /* 지도 컨테이너 스타일 */
 .map-container {
-  width: 100%; /* 전체 너비 */
-  height: 80%; /* 고정 높이 */
-  border: 1px solid #ddd; /* 연한 회색 경계선 */
-  border-radius: 5px; /* 둥근 모서리 */
-  background-color: #fff; /* 흰색 배경 */
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* 부드러운 그림자 */
-  overflow: hidden; /* 내용이 컨테이너를 넘지 않도록 설정 */
+  width: 75%;
+  height: 100%;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  background-color: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+/* 카메라 정보 스타일 */
+.camera-info {
+  width: 25%;
+  padding: 10px;
+  border: 1px solid white;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
+  font-size: 14px;
+  color: white;
+  font-family: "NanumSquareNeo", sans-serif; /* 폰트 적용 */
 }

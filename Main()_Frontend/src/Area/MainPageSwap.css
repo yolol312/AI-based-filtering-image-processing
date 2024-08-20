@@ -1,0 +1,34 @@
+.MainScreen {
+  padding: 20px;
+  background-color: #000; /* 배경색을 검정으로 설정 */
+  color: #fff; /* 텍스트 색상을 흰색으로 설정 */
+  width: 100%;
+  height: 80vh; /* 화면의 80% 높이 차지 */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center; /* 제목을 중앙 정렬 */
+}
+
+.main-title {
+  font-size: 2.5rem;
+  margin-bottom: 80px;
+  text-align: center; /* 제목을 중앙 정렬 */
+}
+
+.content {
+  text-align: left; /* 내용을 좌측 정렬 */
+  width: 80%; /* 텍스트가 중앙에 넓게 배치되도록 설정 */
+  background-color: #000; /* 배경색을 검정으로 설정 */
+}
+
+.section-title {
+  font-size: 1.5rem;
+  margin-bottom: 10px;
+  text-align: left; /* 섹션 제목 좌측 정렬 */
+}
+
+.section-paragraph {
+  font-size: 1.2rem;
+  margin-bottom: 20px;
+}

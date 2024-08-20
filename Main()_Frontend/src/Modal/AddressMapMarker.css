@@ -2,64 +2,113 @@
 
 .address-map-marker {
   display: flex;
+  flex-direction: row; /* 열(row) 방향으로 변경 */
+  align-items: flex-start; /* 왼쪽 상단에 정렬 */
+  justify-content: space-between; /* 양쪽 끝에 정렬 */
+  text-align: left; /* 텍스트를 왼쪽 정렬 */
+}
+
+.label-container {
+  margin-bottom: 15px; /* label과 map 사이의 간격을 15px로 설정 */
+}
+
+.address-input-container {
+  display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
+  align-items: flex-start;
+  margin-right: 20px;
+  margin-left: 25px;
+  margin-top: 30px;
 }
 
 .address-map-marker input {
-  width: 80%;
+  width: 250px; /* 입력창 크기 조정 */
   padding: 10px;
-  margin-top: 10px;
+  margin-bottom: 10px;
 }
 
 .address-submit-button {
-  margin-top: 2%;
-  padding: 10px 20px;
-  margin-bottom: 1%;
-  font-size: 16px;
-  border: none;
+  padding: 8px 20px;
+  font-size: 14px;
   border-radius: 4px;
   cursor: pointer;
-  background-color: black;
+  background-color: #000; /* 버튼 배경을 검정색으로 */
+  border: 1px solid #fff; /* 흰색 테두리 */
   color: white;
+  margin-left: 5px; /* 맵과의 간격 추가 */
+  margin-bottom: 20px; /* 입력창과 검색 버튼 사이의 간격 조정 */
 }
 
-.cam-submit-button {
-  margin-top: 10px;
-  padding: 10px 20px;
-  margin-bottom: 3%;
-  font-size: 16px;
-  border: none;
+.cam-list-container {
+  width: 100%;
+  background-color: #333; /* 리스트 배경색 */
+  border-radius: 4px; /* 모서리 둥글게 */
+  padding: 5px;
+  margin-top: 0px;
+}
+
+.cam-list-container h3 {
+  margin-bottom: 15px;
+  font-size: 18px;
+  color: #fff;
+}
+
+.cam-list-container table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #444; /* 테이블 배경색 */
   border-radius: 4px;
-  cursor: pointer;
-  background-color: #007bff;
+  overflow: hidden;
+}
+
+.cam-list-container th,
+.cam-list-container td {
+  padding: 10px;
+  text-align: center;
   color: white;
+  border-bottom: 1px solid #555; /* 행 구분을 위한 테두리 */
+}
+
+.cam-list-container th {
+  background-color: #555; /* 테이블 헤더 배경색 */
+  font-weight: bold;
+}
+
+.cam-list-container tr:last-child td {
+  border-bottom: none; /* 마지막 행의 테두리를 없앰 */
 }
 
 .map-AddressMapMarker-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 55vh; /* 전체 화면 높이의 65% 사용 */
-  width: 82%; /* 전체 너비 사용 */
-  margin: 0 auto; /* 가운데 정렬 */
+  flex-grow: 1;
+  height: 70vh;
+  width: 60vh; /* height와 width를 동일하게 하여 정사각형 모양으로 설정 */
   position: relative;
+  margin-left: 15px; /* map과 검색 부분의 간격 추가 */
 }
 
-.radio-group {
-  margin-top: 20px;
+.Map-modal-button-container {
   display: flex;
-  justify-content: center;
-  gap: 20px; /* 버튼 사이의 간격 설정 */
+  justify-content: flex-end; /* 왼쪽으로 정렬 */
+  padding-right: 50px; /* 왼쪽 여백 추가 */
+  padding-bottom: 30px; /* 아래쪽 여백 추가 */
+  position: absolute; /* 절대 위치로 설정 */
+  bottom: 0; /* 아래에 위치 */
+  right: 0; /* 왼쪽에 위치 */
+  width: auto; /* 필요한 만큼 너비 사용 */
 }
 
-.radio-group label {
-  display: flex;
-  align-items: center;
+.Map-modal-button-close {
+  padding: 10px 20px;
+  font-size: 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: #000; /* 버튼 배경을 검정색으로 */
+  border: 1px solid #fff; /* 흰색 테두리 */
+  color: white;
+  width: 230px; /* 버튼 너비를 고정된 크기로 설정 */
 }
 
-.address-submit-button:hover {
-  opacity: 0.7; /* 불투명도를 80%로 변경 */
+.address-submit-button:hover,
+.Map-modal-button-close:hover {
+  opacity: 0.6; /* 불투명도를 60%로 변경 */
 }

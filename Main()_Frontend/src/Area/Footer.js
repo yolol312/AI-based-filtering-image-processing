@@ -1,44 +1,63 @@
-import React, { useContext, useEffect, useState } from 'react';
-import { ClipDataContext } from '../Data/ClipDataContext';
-import './Footer.css';
+import React, { useContext, useEffect, useRef } from "react";
+import { LogDataContext } from "../Data/LogDataContext";
+import "./Footer.css";
 
-const Server_IP = process.env.REACT_APP_Server_IP;
+function Footer(sidebarWidth) {
+  const { logInfo } = useContext(LogDataContext); // 로그 데이터를 가져옴
+  const consoleRef = useRef(null); // 콘솔 요소에 대한 ref 생성
 
-function Footer({ onClipSwapClick, clipInfo }) {
-  const { clipInfo: clipInfoFromContext } = useContext(ClipDataContext);
-  const [videos, setVideos] = useState([]);
-
+  // 로그가 업데이트될 때마다 스크롤을 맨 아래로 내림
   useEffect(() => {
-    const clipInfoToUse = clipInfo || clipInfoFromContext;
-    if (Array.isArray(clipInfoToUse) && clipInfoToUse.length > 0) {
-      setVideos(clipInfoToUse.map((clip) => clip.clip_video || ''));
-    } else {
-      setVideos([]);
+    if (consoleRef.current) {
+      consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
     }
-  }, [clipInfo, clipInfoFromContext]);
-
-  const handleVideoClick = (video) => {
-    const videoUrl = `${Server_IP}/stream_clipvideo?clip_video=${encodeURIComponent(video)}`;
-    console.log('Video URL:', videoUrl);
-    onClipSwapClick(videoUrl);
-  };
-
-  if (videos.length === 0) {
-    return (
-      <div className="Footer">
-        {/* 비디오가 없을 때의 표시 */}
-      </div>
-    );
-  }
+  }, [logInfo]); // logInfo가 업데이트될 때마다 실행됨
 
   return (
-    <div className="Footer">
-      <div className="video-list">
-        {videos.map((video, index) => (
-          <div key={index} className="video-item" onClick={() => handleVideoClick(video)}>
-            {/* 비디오 아이템을 클릭할 수 있게 처리 */}
-          </div>
-        ))}
+    <div
+      className="Footer"
+      style={{ left: `${sidebarWidth}px` }} // Sidebar의 너비만큼 left 설정
+    >
+      <div className="console" ref={consoleRef}>
+        {logInfo.map((log, index) => {
+          // log가 null이나 undefined인 경우 아무것도 렌더링하지 않음
+          if (!log || !log.timestamp) return null;
+
+          // person_data에서 필요한 정보만 추출
+          const personData = log.person_data.split(", ").reduce((acc, item) => {
+            const [key, value] = item.split(": ");
+            if (
+              key === "Track ID" ||
+              key === "Gender" ||
+              key === "Age" ||
+              key === "UpClothes" ||
+              key === "DownClothes"
+            ) {
+              acc[key] = value;
+            }
+            return acc;
+          }, {});
+
+          return (
+            <div key={index} className="log-line">
+              <p>
+                <strong>Timestamp:</strong> {log.timestamp}
+              </p>
+              <p>
+                <strong>Track ID:</strong> {personData["Track ID"]}
+                {"    |    "}
+                <strong>Gender:</strong> {personData["Gender"]}
+                {"    |    "}
+                <strong>Age:</strong> {personData["Age"]}
+                {"    |    "}
+                <strong>UpClothes:</strong> {personData["UpClothes"]}
+                {"    |    "}
+                <strong>DownClothes:</strong> {personData["DownClothes"]}
+              </p>
+              {log.image && <img src={log.image} alt="Log Image" />}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

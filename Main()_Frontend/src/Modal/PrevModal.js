@@ -1,10 +1,8 @@
-// MapModal.js
-
 import React, { useEffect, useCallback } from "react";
-import "./MapModal.css";
-import AddressMapMarker from "./AddressMapMarker";
+import "./PrevModal.css";
+import PrevVideoPlay from "./PrevVideoPlay";
 
-function MapModal({ isOpen, onClose }) {
+function PrevModal({ isOpen, onClose }) {
   //모달 창 닫기 이벤트
   const handleSimpleClose = useCallback(() => {
     onClose();
@@ -29,23 +27,23 @@ function MapModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   return (
-    <div className="Map-modal-overlay">
-      <div className="Map-modal-content">
-        <div className="Map-modal-top">
-          <h2>지도 업로드</h2>
+    <div className="Prev-modal-overlay">
+      <div className="Prev-modal-content">
+        <div className="Prev-modal-top">
+          <h2>이전 분석 기록</h2>
           <button
-            className="Map-modal-button-simple-close"
+            className="Prev-modal-button-simple-close"
             onClick={handleSimpleClose}
           >
             X
           </button>
         </div>
-        <div className="Map-modal-body">
-          <AddressMapMarker onClose={handleSimpleClose} />
+        <div className="Prev-modal-body">
+          <PrevVideoPlay onClose={handleSimpleClose} />
         </div>
       </div>
     </div>
   );
 }
 
-export default MapModal;
+export default PrevModal;

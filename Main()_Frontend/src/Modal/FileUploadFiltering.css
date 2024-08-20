@@ -1,86 +1,65 @@
 .file-upload-filtering {
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex-direction: row; /* 가로로 배치 */
+  justify-content: space-between;
+  align-items: flex-start;
   padding: 20px;
-  background-color: #f9f9f9;
-  min-height: 100vh;
+  background-color: #2c2c2c; /* 배경색을 어두운 색으로 변경 */
+  color: #fff; /* 텍스트 색상을 흰색으로 변경 */
+  width: auto; /* 전체 화면을 차지 */
+  height: auto; /* 자동 높이 조정 */
+  gap: 20px; /* file-upload와 filtering 사이의 간격 추가 */
 }
 
 .file-upload,
 .filtering {
-  width: 80%;
-  max-width: 800px;
-  margin-bottom: 20px;
+  width: 48%; /* 각각의 섹션이 화면의 절반을 차지 */
+  background-color: #333; /* 섹션의 배경색 */
   padding: 20px;
-  background-color: #fff;
   border-radius: 8px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
 }
 
 .file-upload h2,
 .filtering h2 {
-  text-align: center; /* 제목을 가운데 정렬 */
-  margin-bottom: 20px;
-  font-size: 24px;
-  color: #333;
+  text-align: left; /* 제목을 왼쪽 정렬 */
+  margin-bottom: 10px;
+  font-size: 18px; /* 제목 폰트 크기 조정 */
+  color: #fff; /* 제목 색상 흰색 */
 }
 
-.file-upload input[type='file'],
-.file-upload input[type='text'],
-.filtering input[type='file'],
+.file-upload input[type="file"],
+.file-upload input[type="text"],
+.filtering input[type="file"],
+.filtering select,
+.filtering input[type="text"] {
+  width: 90%; /* 필드가 가로로 90%만 차지하게 설정 */
+  padding: 8px; /* 패딩을 줄여서 입력 필드 크기를 조정 */
+  margin-top: 10px;
+  border: 1px solid #555; /* 경계선을 어두운 색으로 변경 */
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: #444; /* 입력 필드 배경색 어둡게 */
+  color: #fff; /* 텍스트 색상 흰색 */
+}
+
+.file-upload select,
 .filtering select {
-  width: calc(100% - 24px); /* Padding과 border를 제외한 너비 */
-  padding: 12px;
-  margin-top: 10px;
-  border: 1px solid #ddd;
+  appearance: none;
+  background-color: #444; /* 콤보박스 배경색 어둡게 */
+  border: 1px solid #555;
   border-radius: 4px;
-  font-size: 16px;
+  padding: 8px; /* 패딩을 줄여서 선택 박스 크기를 조정 */
+  font-size: 14px;
+  color: #fff;
+  width: 90%; /* 각 선택 박스가 90% 너비를 차지 */
+  margin-right: 10px; /* 선택 박스 간 간격 */
 }
 
-select {
-  appearance: none; /* 기본 드롭다운 화살표 제거 */
-  background-color: #fff;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 10px;
-  font-size: 16px;
-  color: #333;
-  cursor: pointer;
-  transition: border-color 0.3s ease;
-}
-
-select:focus {
-  border-color: black;
-  outline: none;
-}
-
-select option {
-  padding: 10px;
-}
-
-.file-upload .date-time-picker {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 10px;
-  gap: 10px; /* 요소 간의 간격 추가 */
-}
-
-.file-upload .date-time-picker select {
-  flex: 1; /* 각 select 요소의 너비를 균등하게 설정 */
-}
-
-.file-upload .date-time-picker label {
-  flex: 0.1; /* 각 label 요소의 너비를 균등하게 설정 */
-  text-align: center; /* 레이블 중앙 정렬 */
-}
-
-.file-upload .form-group,
-.filtering .form-group {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start; /* 왼쪽 정렬 */
-  margin-top: 15px;
+.file-upload select:last-child {
+  margin-right: 0; /* 마지막 선택 박스는 간격 제거 */
 }
 
 .file-upload .buttons,
@@ -88,24 +67,33 @@ select option {
   display: flex;
   justify-content: center;
   margin-top: 20px;
-  width: 100%;
 }
 
 .file-upload .buttons button,
 .filtering button {
-  background-color: black;
-  border: none;
+  background-color: #000; /* 버튼 배경을 검정색으로 */
+  border: 1px solid #fff; /* 흰색 테두리 */
   color: #fff;
-  padding: 12px 20px;
+  padding: 10px 15px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   transition: background-color 0.3s ease;
+  width: 100%; /* 버튼을 가로로 꽉 채움 */
 }
 
 .file-upload .buttons button:hover,
 .filtering button:hover {
-  background-color: black;
+  background-color: #555; /* 호버 시 배경색을 어둡게 */
+}
+
+.file-list {
+  list-style-type: none;
+  padding: 0;
+  margin-top: 0; /* 위쪽 간격을 없앰 */
+  background-color: #555; /* 리스트 배경색을 흰색으로 설정 */
+  color: white; /* 텍스트 색상을 검은색으로 설정 */
+  border-radius: 0 0 4px 4px; /* 리스트 모서리 둥글게 */
 }
 
 .file-list {
@@ -123,52 +111,119 @@ select option {
 }
 
 .file-list .file-name,
-.file-list .cam-name,
-.file-list .start-time {
+.file-list .address,
+.file-list .cam-name /* start-time 추가해야함*/ {
   flex: 1;
   font-size: 16px;
-  color: #333;
+  color: white;
   text-align: center; /* 텍스트를 가운데 정렬 */
 }
 
-.filtering .form-group {
-  margin-bottom: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start; /* 왼쪽 정렬 */
-}
-
-.filtering .form-group label {
-  display: block;
-  margin-bottom: 5px;
-  font-size: 16px;
-  color: #333;
-}
-
-.filtering .form-group select {
-  width: 100%; /* 콤보박스의 너비를 컨테이너 너비에 맞춤 */
+.form-group {
+  margin-bottom: 20px; /* 각 섹션 사이의 간격을 20px로 설정 */
 }
 
 .filtering .radio-group {
   display: flex;
-  gap: 15px;
+  gap: 10px;
+  margin-top: 10px;
+  justify-content: flex-start; /* 왼쪽 정렬 */
+  align-items: center; /* 라벨과 라디오 버튼이 수직으로 가운데 정렬되도록 */
+}
+
+.radio-group label {
+  font-size: 14px;
+}
+
+.image-path {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #ccc;
+  word-break: break-all;
+}
+
+.inline-group {
+  display: flex;
+  align-items: center;
+  gap: 15px; /* 나이 텍스트와 입력 칸 사이의 간격 */
+  margin-bottom: 10px; /* 각 inline-group 사이의 간격을 10px로 설정 */
+}
+
+.inline-group h2 {
+  margin: 0; /* 제목의 상하 여백 제거 */
+  font-size: 17px; /* 글자 크기 조정 */
+}
+
+.inline-group select {
+  flex: 1; /* 입력 칸이 가능한 너비를 차지하도록 설정 */
+  padding: 5px; /* 입력 칸 내부 여백 */
+  font-size: 14px; /* 입력 칸 텍스트 크기 */
+}
+
+.header-item {
+  width: 24%; /* 각 항목이 동일한 너비를 차지하도록 설정 */
+  text-align: center; /* 텍스트를 가운데 정렬 */
+}
+
+.image-preview-container {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px; /* 이미지와 파일 선택 부분 사이의 간격 */
   margin-top: 10px;
 }
 
-.form-group input[type='file'] {
-  font-size: 16px;
+.image-preview {
+  width: 100px; /* 이미지의 너비 */
+  height: 100px; /* 이미지의 높이 */
+  background-color: #444; /* 이미지가 없을 때 배경색 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 14px;
+  overflow: hidden;
 }
 
-.date-time-picker label {
-  margin-top: auto; /* 라벨의 수직 정렬을 중간으로 설정 */
-  margin-bottom: auto;
+.image-preview img {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.file-input-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.file-input-container h2 {
+  margin-bottom: 10px;
+}
+
+/* '리스트 삭제' 버튼 추가 */
+.file-upload .buttons .remove-from-list-button {
+  background-color: black; /* 어두운 회색으로 설정 */
+  color: #fff; /* 텍스트 색상 흰색으로 */
+  margin-left: 10px; /* '리스트 추가' 버튼과 간격 */
+}
+
+/* 선택된 리스트 항목의 배경색을 더 진하게 설정 */
+.file-list li.selected {
+  background-color: #1a1a1a; /* 더 진한 그레이 색상 */
+  color: #fff; /* 텍스트 색상을 흰색으로 유지 */
+}
+
+/* 리스트 항목 호버 효과 */
+.file-list li:hover {
+  background-color: #373737; /* 호버 시 배경색 변경 */
+  cursor: pointer; /* 마우스 포인터를 손가락 모양으로 변경 */
 }
 
 #progress-bar {
   width: 0;
   height: 30px;
   line-height: 30px;
-  background-color: black;
+  background-color: rgb(0, 255, 0);
   border-radius: 20px;
   text-align: center;
   color: white;
