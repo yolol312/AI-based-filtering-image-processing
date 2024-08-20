@@ -11,7 +11,7 @@ def get_db_connection():
         host='localhost',
         user='root',
         password='1234',
-        database='wb39_project4',
+        database='server',
         cursorclass=pymysql.cursors.DictCursor
     )
 #or_video_id를 통해 cam_num을 가져오는 함수를 추가합니다.
